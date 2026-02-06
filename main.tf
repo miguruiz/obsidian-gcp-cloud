@@ -10,21 +10,21 @@
 # -----------------------------------------------------------------------------
 
 # CouchDB access firewall rule
-# WARNING: The default allows all IPs (0.0.0.0/0). This is INSECURE for production.
-# After initial deployment, restrict allowed_ips to your specific IP addresses.
+# Only created if allowed_ips is not empty. Use HTTPS or Tailscale for secure access.
 resource "google_compute_firewall" "allow_couchdb" {
+  count   = length(var.allowed_ips) > 0 ? 1 : 0
   name    = "allow-couchdb-5984"
   network = "default"
   project = var.project_id
 
-  description = "Allow CouchDB access on port 5984. RESTRICT allowed_ips after initial setup!"
+  description = "Allow CouchDB access on port 5984 from specific IPs only"
 
   allow {
     protocol = "tcp"
     ports    = ["5984"]
   }
 
-  # Source ranges - defaults to 0.0.0.0/0 but SHOULD be restricted
+  # Source ranges - only specific IPs, never 0.0.0.0/0
   source_ranges = var.allowed_ips
 
   target_tags = ["couchdb-server"]
@@ -413,9 +413,4 @@ CADDYFILE
 
   # Allow stopping for update (required for some changes)
   allow_stopping_for_update = true
-
-  # Ensure firewall rules exist before VM is created
-  depends_on = [
-    google_compute_firewall.allow_couchdb
-  ]
 }
