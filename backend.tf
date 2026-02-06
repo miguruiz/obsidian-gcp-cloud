@@ -26,10 +26,3 @@ terraform {
 # 3. State Locking: Prevents concurrent modifications
 # 4. Security: Sensitive values stay out of git
 # 5. Backup: GCS provides durability and versioning
-
-# Migration from local to remote state:
-# -------------------------------------
-# After creating the bucket and uncommenting the backend block:
-# 1. Run: terraform init -migrate-state
-# 2. Terraform will ask to copy existing state to GCS
-# 3. Confirm with "yes"
