@@ -286,7 +286,7 @@ DUCKDNS_SCRIPT
         fi
 
         # Add to crontab (updates every 5 minutes)
-        (crontab -l 2>/dev/null; echo "*/5 * * * * /opt/duckdns/duck.sh >/dev/null 2>&1") | crontab -
+        (crontab -l 2>/dev/null || true; echo "*/5 * * * * /opt/duckdns/duck.sh >/dev/null 2>&1") | crontab -
         echo ">>> DuckDNS auto-updater configured (runs every 5 min)"
 
         # --------------------
