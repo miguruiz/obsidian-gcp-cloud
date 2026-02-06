@@ -209,6 +209,33 @@ resource "google_compute_instance" "obsidian_couchdb_vm" {
     fi
 
     # --------------------------------------------------------------------------
+    # Configure CORS for CouchDB
+    # --------------------------------------------------------------------------
+    echo ">>> Configuring CORS for CouchDB..."
+
+    # Enable CORS
+    curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/httpd/enable_cors \
+      -d '"true"' -H "Content-Type: application/json"
+
+    # Allow all origins (for Obsidian desktop and mobile)
+    curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/cors/origins \
+      -d '"*"' -H "Content-Type: application/json"
+
+    # Allow credentials
+    curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/cors/credentials \
+      -d '"true"' -H "Content-Type: application/json"
+
+    # Allow methods
+    curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/cors/methods \
+      -d '"GET, PUT, POST, HEAD, DELETE"' -H "Content-Type: application/json"
+
+    # Allow headers
+    curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/cors/headers \
+      -d '"accept, authorization, content-type, origin, referer, x-requested-with"' -H "Content-Type: application/json"
+
+    echo ">>> CORS configured successfully!"
+
+    # --------------------------------------------------------------------------
     # Optional: Install and Configure Tailscale
     # --------------------------------------------------------------------------
     # Tailscale provides private network access without exposing ports publicly
