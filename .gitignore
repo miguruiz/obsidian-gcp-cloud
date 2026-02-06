@@ -1,0 +1,63 @@
+# =============================================================================
+# .gitignore for Terraform + Obsidian CouchDB project
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Terraform
+# -----------------------------------------------------------------------------
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files (state should be in GCS, not local)
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files, which may contain sensitive data
+*.tfvars
+*.tfvars.json
+
+# But keep the example file
+!terraform.tfvars.example
+
+# Ignore override files as they are usually used for local overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+
+# Terraform plan output files
+*.tfplan
+tfplan
+
+# Lock file should be committed for consistent provider versions
+# !.terraform.lock.hcl
+
+# -----------------------------------------------------------------------------
+# IDE / Editor
+# -----------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# -----------------------------------------------------------------------------
+# Secrets / Credentials (NEVER commit these!)
+# -----------------------------------------------------------------------------
+*.pem
+*.key
+credentials.json
+service-account*.json
+*-credentials.json
+.env
+.env.*
+secrets/

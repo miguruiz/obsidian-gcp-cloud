@@ -1,0 +1,295 @@
+# =============================================================================
+# GitHub Actions Workflow: Terraform Deploy for Obsidian CouchDB
+# =============================================================================
+# This workflow uses Workload Identity Federation (OIDC) for keyless auth to GCP.
+# NO long-lived service account keys are stored in GitHub!
+#
+# MANUAL SETUP REQUIRED before this workflow will work:
+# See README.md for complete Workload Identity Federation setup instructions.
+# =============================================================================
+
+name: "Terraform Deploy"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "*.tf"
+      - ".github/workflows/deploy.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "*.tf"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch: # Allow manual trigger
+
+# =============================================================================
+# IMPORTANT: Workload Identity Federation Setup (MANUAL STEPS)
+# =============================================================================
+# Before this workflow can authenticate to GCP, you must:
+#
+# 1. Create a Workload Identity Pool:
+#    gcloud iam workload-identity-pools create "github-actions-pool" \
+#      --location="global" \
+#      --display-name="GitHub Actions Pool"
+#
+# 2. Create a Workload Identity Provider (connects GitHub OIDC to GCP):
+#    gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+#      --location="global" \
+#      --workload-identity-pool="github-actions-pool" \
+#      --display-name="GitHub Provider" \
+#      --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
+#      --attribute-condition="assertion.repository_owner == 'YOUR_GITHUB_USERNAME'" \
+#      --issuer-uri="https://token.actions.githubusercontent.com"
+#
+# 3. Create a Service Account for Terraform:
+#    gcloud iam service-accounts create terraform-github-actions \
+#      --display-name="Terraform GitHub Actions"
+#
+# 4. Grant the Service Account necessary permissions:
+#    gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+#      --member="serviceAccount:terraform-github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+#      --role="roles/compute.admin"
+#
+#    gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+#      --member="serviceAccount:terraform-github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+#      --role="roles/storage.admin"
+#
+# 5. Allow GitHub Actions to impersonate the Service Account:
+#    gcloud iam service-accounts add-iam-policy-binding \
+#      terraform-github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+#      --role="roles/iam.workloadIdentityUser" \
+#      --member="principalSet://iam.googleapis.com/projects/YOUR_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool/attribute.repository/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME"
+#
+# 6. Get your Workload Identity Provider resource name:
+#    gcloud iam workload-identity-pools providers describe github-provider \
+#      --location="global" \
+#      --workload-identity-pool="github-actions-pool" \
+#      --format="value(name)"
+#
+#    This gives you: projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider
+#
+# 7. Set GitHub repository secrets/variables:
+#    Variables (Settings → Secrets and variables → Actions → Variables):
+#    - GCP_PROJECT_ID: Your GCP project ID
+#    - WIF_PROVIDER: The full provider name from step 6
+#    - WIF_SERVICE_ACCOUNT: terraform-github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com
+#
+#    Secrets (Settings → Secrets and variables → Actions → Secrets):
+#    - COUCHDB_PASSWORD: Your strong CouchDB password
+#    - TAILSCALE_AUTH_KEY: (Optional) Tailscale auth key for automatic private networking
+#
+# =============================================================================
+
+env:
+  TF_VERSION: "1.7.0"
+  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_couchdb_password: ${{ secrets.COUCHDB_PASSWORD }}
+  TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
+  # Optional: Override defaults via GitHub variables
+  # TF_VAR_region: ${{ vars.GCP_REGION }}
+  # TF_VAR_zone: ${{ vars.GCP_ZONE }}
+  # TF_VAR_allowed_ips: ${{ vars.ALLOWED_IPS }}
+
+# Permissions required for Workload Identity Federation
+permissions:
+  contents: read
+  id-token: write # Required for OIDC token request
+
+jobs:
+  # ===========================================================================
+  # Terraform Plan - Runs on all PRs and pushes
+  # ===========================================================================
+  terraform-plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # Checkout repository
+      # -----------------------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Authenticate to GCP using Workload Identity Federation
+      # This requests an OIDC token from GitHub and exchanges it for GCP credentials
+      # -----------------------------------------------------------------------
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+          # token_format: access_token # Uncomment if you need an access token
+
+      # -----------------------------------------------------------------------
+      # Setup Terraform
+      # -----------------------------------------------------------------------
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false # Disable wrapper for cleaner output
+
+      # -----------------------------------------------------------------------
+      # Terraform Format Check
+      # -----------------------------------------------------------------------
+      - name: Terraform Format
+        id: fmt
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      # -----------------------------------------------------------------------
+      # Terraform Init
+      # Initializes the backend and downloads providers
+      # -----------------------------------------------------------------------
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      # -----------------------------------------------------------------------
+      # Terraform Validate
+      # Validates the configuration syntax
+      # -----------------------------------------------------------------------
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      # -----------------------------------------------------------------------
+      # Terraform Plan
+      # Creates an execution plan showing what will change
+      # -----------------------------------------------------------------------
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+        continue-on-error: true
+
+      # -----------------------------------------------------------------------
+      # Post Plan to PR (for Pull Requests only)
+      # -----------------------------------------------------------------------
+      - name: Comment Plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PLAN: ${{ steps.plan.outputs.stdout }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${process.env.PLAN}
+            \`\`\`
+
+            </details>
+
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      # -----------------------------------------------------------------------
+      # Upload Plan for Apply job
+      # -----------------------------------------------------------------------
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan
+
+      # -----------------------------------------------------------------------
+      # Fail if plan failed
+      # -----------------------------------------------------------------------
+      - name: Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  # ===========================================================================
+  # Terraform Apply - Only runs on push to main (after successful plan)
+  # ===========================================================================
+  terraform-apply:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    # Use GitHub Environment for additional protection (optional)
+    # environment:
+    #   name: production
+    #   url: ${{ steps.apply.outputs.couchdb_url }}
+
+    steps:
+      # -----------------------------------------------------------------------
+      # Checkout repository
+      # -----------------------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Authenticate to GCP
+      # -----------------------------------------------------------------------
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      # -----------------------------------------------------------------------
+      # Setup Terraform
+      # -----------------------------------------------------------------------
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # -----------------------------------------------------------------------
+      # Download Plan from previous job
+      # -----------------------------------------------------------------------
+      - name: Download Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+
+      # -----------------------------------------------------------------------
+      # Terraform Init
+      # -----------------------------------------------------------------------
+      - name: Terraform Init
+        run: terraform init
+
+      # -----------------------------------------------------------------------
+      # Terraform Apply
+      # Applies the saved plan (no confirmation needed)
+      # -----------------------------------------------------------------------
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve tfplan
+
+      # -----------------------------------------------------------------------
+      # Output Results
+      # -----------------------------------------------------------------------
+      - name: Get Outputs
+        id: outputs
+        run: |
+          echo "## Deployment Outputs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Output | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| VM External IP | $(terraform output -raw vm_external_ip) |" >> $GITHUB_STEP_SUMMARY
+          echo "| CouchDB URL | $(terraform output -raw couchdb_url) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Admin UI | $(terraform output -raw couchdb_admin_ui) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Remember to restrict firewall rules after initial setup!**" >> $GITHUB_STEP_SUMMARY

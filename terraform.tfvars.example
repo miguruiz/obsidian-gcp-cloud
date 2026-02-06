@@ -1,0 +1,67 @@
+# =============================================================================
+# terraform.tfvars.example - Example variable values
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# IMPORTANT: Never commit terraform.tfvars to git! It contains secrets.
+# The .gitignore file should already exclude it.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# GCP Project (REQUIRED)
+# -----------------------------------------------------------------------------
+project_id = "your-gcp-project-id"
+
+# -----------------------------------------------------------------------------
+# Region/Zone (Optional - defaults are free-tier eligible)
+# -----------------------------------------------------------------------------
+# Free-tier eligible regions: us-west1, us-central1, us-east1
+# region = "us-central1"
+# zone   = "us-central1-a"
+
+# -----------------------------------------------------------------------------
+# CouchDB Credentials (REQUIRED)
+# -----------------------------------------------------------------------------
+couchdb_user     = "admin"
+couchdb_password = "CHANGE_ME_use_a_strong_password_here_min_12_chars"
+
+# -----------------------------------------------------------------------------
+# Network Security (IMPORTANT - Restrict after initial setup!)
+# -----------------------------------------------------------------------------
+# WARNING: Default allows ALL IPs. This is INSECURE!
+#
+# For initial testing only:
+# allowed_ips = ["0.0.0.0/0"]
+#
+# After initial setup, restrict to your IP:
+# allowed_ips = ["YOUR.HOME.IP.ADDRESS/32"]
+#
+# Find your IP: curl ifconfig.me
+#
+# Multiple IPs example:
+# allowed_ips = ["1.2.3.4/32", "5.6.7.8/32"]
+
+allowed_ips = ["0.0.0.0/0"]  # CHANGE THIS AFTER INITIAL SETUP!
+
+# SSH access (leave empty to disable SSH firewall rule - recommended)
+# ssh_allowed_ips = ["YOUR.IP.ADDRESS/32"]
+ssh_allowed_ips = []
+
+# -----------------------------------------------------------------------------
+# Optional: Tailscale Configuration
+# -----------------------------------------------------------------------------
+# Get an auth key from: https://login.tailscale.com/admin/settings/keys
+# - Create a new auth key
+# - Mark as "Reusable" so the VM can reconnect after restarts
+# - Set expiration (or make it non-expiring for personal use)
+#
+# If provided, Tailscale will be installed automatically, giving you private
+# access to CouchDB without exposing it to the public internet!
+#
+# tailscale_auth_key = "tskey-auth-xxxxxxxxxxxxxxxxxxxxx"
+
+# -----------------------------------------------------------------------------
+# For CI/CD Reference (not used directly by Terraform)
+# -----------------------------------------------------------------------------
+# terraform_state_bucket = "obsidian-couchdb-tfstate-UNIQUE_SUFFIX"
