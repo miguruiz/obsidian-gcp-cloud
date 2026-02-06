@@ -123,7 +123,8 @@ jobs:
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
-          # token_format: access_token # Uncomment if you need an access token
+          create_credentials_file: true
+          export_environment_variables: true
 
       # -----------------------------------------------------------------------
       # Setup Terraform
@@ -246,6 +247,8 @@ jobs:
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
 
       # -----------------------------------------------------------------------
       # Setup Terraform
