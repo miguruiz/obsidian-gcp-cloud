@@ -17,23 +17,7 @@ terraform {
     }
   }
 
-  # ==========================================================================
-  # IMPORTANT: Remote State Backend (MANUAL SETUP REQUIRED)
-  # ==========================================================================
-  # Uncomment and configure this block AFTER creating your GCS bucket manually.
-  # See README.md for bucket creation instructions.
-  #
-  # backend "gcs" {
-  #   bucket = "YOUR_BUCKET_NAME_HERE"  # e.g., "obsidian-couchdb-tfstate-12345"
-  #   prefix = "terraform/state"
-  # }
-  #
-  # Why use remote state?
-  # - Enables CI/CD (GitHub Actions needs shared state)
-  # - Prevents state file conflicts when working from multiple machines
-  # - Provides state locking to prevent concurrent modifications
-  # - Keeps sensitive values out of git
-  # ==========================================================================
+  # Backend configuration is in backend.tf
 }
 
 # -----------------------------------------------------------------------------
