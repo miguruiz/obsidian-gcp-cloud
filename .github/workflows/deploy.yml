@@ -13,13 +13,13 @@ name: "Terraform Deploy"
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - "*.tf"
       - ".github/workflows/deploy.yml"
   pull_request:
     branches:
-      - main
+      - master
     paths:
       - "*.tf"
       - ".github/workflows/deploy.yml"
