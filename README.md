@@ -314,16 +314,247 @@ git push origin main
 
 ---
 
-### STEP 7: Configure Obsidian LiveSync
+### STEP 7: Configure Obsidian LiveSync (Desktop Only - Initial Setup)
 
 1. Get the CouchDB URL from Terraform outputs or GitHub Actions summary
-2. In Obsidian (desktop and mobile), install the "Self-hosted LiveSync" plugin
+2. In Obsidian **desktop**, install the "Self-hosted LiveSync" plugin
 3. Configure the plugin:
-   - **Server URL**: `http://YOUR_VM_IP:5984` (or `http://100.x.x.x:5984` if using Tailscale)
+   - **Server URL**: `http://YOUR_VM_IP:5984`
    - **Username**: `admin` (or your configured username)
    - **Password**: Your CouchDB password
    - **Database**: `obsidian` (or any name you prefer)
    - **End-to-end encryption**: Enable and set a passphrase
+
+**Note:** Mobile requires HTTPS - see Step 7.5 below.
+
+---
+
+### STEP 7.5: Add HTTPS for Mobile Access (REQUIRED for Mobile)
+
+⚠️ **Mobile Obsidian requires HTTPS**. You have several options:
+
+#### Choose Your HTTPS Solution:
+
+<details>
+<summary><b>Option 1: Tailscale (Recommended for Home/Personal Use)</b></summary>
+
+**Pros:** Private VPN, works with HTTP, most secure
+**Cons:** Requires Tailscale app on all devices, may not work on work computers
+
+**If you set `TAILSCALE_AUTH_KEY`**, Tailscale is already installed. Otherwise:
+
+```bash
+# SSH to your VM
+gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a --project=YOUR_PROJECT_ID
+
+# Install Tailscale
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# Start Tailscale (opens browser for auth)
+sudo tailscale up
+
+# Get your Tailscale IP
+tailscale ip -4
+```
+
+**On all devices:**
+1. Install Tailscale app
+2. Log in to same Tailscale account
+3. Use `http://100.x.x.x:5984` in Obsidian (works on mobile even though HTTP!)
+
+</details>
+
+<details>
+<summary><b>Option 2: DuckDNS + Caddy (Recommended for Universal Access)</b></summary>
+
+**Pros:** Free HTTPS subdomain, works everywhere (home, work, mobile)
+**Cons:** 10-minute setup, requires firewall to allow port 443
+
+**Setup:**
+
+1. **Get a free DuckDNS subdomain:**
+   - Go to https://www.duckdns.org/
+   - Sign in with Google/GitHub/Reddit
+   - Create subdomain: `obsidian-yourname`
+   - Point it to your VM's external IP
+   - Copy your DuckDNS token
+
+2. **Update GCP firewall to allow HTTPS:**
+
+   Add to `main.tf` or run:
+   ```bash
+   gcloud compute firewall-rules create allow-https \
+     --project=YOUR_PROJECT_ID \
+     --allow=tcp:443 \
+     --source-ranges=0.0.0.0/0 \
+     --target-tags=couchdb-server
+   ```
+
+3. **On your VM, set up DuckDNS updater:**
+   ```bash
+   # SSH to VM
+   gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a
+
+   # Create DuckDNS update script
+   mkdir -p ~/duckdns
+   cat > ~/duckdns/duck.sh <<EOF
+   #!/bin/bash
+   echo url="https://www.duckdns.org/update?domains=YOUR_SUBDOMAIN&token=YOUR_TOKEN&ip=" | curl -k -o ~/duckdns/duck.log -K -
+   EOF
+   chmod +x ~/duckdns/duck.sh
+
+   # Test it
+   ~/duckdns/duck.sh
+   cat ~/duckdns/duck.log  # Should say "OK"
+
+   # Add to crontab (updates every 5 min)
+   (crontab -l 2>/dev/null; echo "*/5 * * * * ~/duckdns/duck.sh >/dev/null 2>&1") | crontab -
+   ```
+
+4. **Install Caddy (automatic HTTPS with Let's Encrypt):**
+   ```bash
+   # Install Caddy
+   sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+   sudo apt update
+   sudo apt install caddy
+
+   # Configure Caddy (replace with your subdomain)
+   sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
+   obsidian-yourname.duckdns.org {
+       reverse_proxy localhost:5984
+   }
+   EOF
+
+   # Restart Caddy
+   sudo systemctl restart caddy
+   sudo systemctl enable caddy
+
+   # Check status
+   sudo systemctl status caddy
+   ```
+
+5. **Wait 1-2 minutes for Let's Encrypt certificate**
+
+6. **Test in browser:** `https://obsidian-yourname.duckdns.org`
+
+**In Obsidian (all devices):**
+- Server URL: `https://obsidian-yourname.duckdns.org`
+
+</details>
+
+<details>
+<summary><b>Option 3: Custom Domain + Caddy (If You Own a Domain)</b></summary>
+
+**Pros:** Your own domain, professional
+**Cons:** Costs $10/year for domain
+
+**Setup:**
+
+1. **Buy a domain** (Namecheap, Porkbun, Google Domains, etc.)
+
+2. **Point DNS A record** to your VM's external IP:
+   ```
+   Type: A
+   Name: obsidian (or @)
+   Value: YOUR_VM_IP
+   TTL: 300
+   ```
+
+3. **Update firewall** (same as DuckDNS option above)
+
+4. **On your VM:**
+   ```bash
+   # Install Caddy (same as DuckDNS)
+   sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+   sudo apt update
+   sudo apt install caddy
+
+   # Configure Caddy
+   sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
+   obsidian.yourdomain.com {
+       reverse_proxy localhost:5984
+   }
+   EOF
+
+   sudo systemctl restart caddy
+   sudo systemctl enable caddy
+   ```
+
+**In Obsidian:** `https://obsidian.yourdomain.com`
+
+</details>
+
+<details>
+<summary><b>Option 4: Cloudflare Tunnel (If You Have a Domain in Cloudflare)</b></summary>
+
+**Pros:** DDoS protection, works through firewalls
+**Cons:** Requires domain in Cloudflare, more complex
+
+**Setup:**
+
+1. **Add your domain to Cloudflare** (free plan)
+
+2. **On your VM:**
+   ```bash
+   # Install cloudflared
+   wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+   sudo dpkg -i cloudflared-linux-amd64.deb
+
+   # Authenticate
+   cloudflared tunnel login
+   ```
+
+3. **In Cloudflare Dashboard:**
+   - Go to https://one.dash.cloudflare.com/
+   - Networks → Tunnels → Create tunnel
+   - Name: `obsidian-couchdb`
+   - Copy the install command and run on VM
+
+4. **Configure public hostname:**
+   - Subdomain: `obsidian`
+   - Domain: `yourdomain.com`
+   - Service: `http://localhost:5984`
+
+**In Obsidian:** `https://obsidian.yourdomain.com`
+
+</details>
+
+<details>
+<summary><b>Option 5: ngrok (Quick Testing Only)</b></summary>
+
+**Pros:** Instant setup, no domain needed
+**Cons:** Free tier gives random URL that changes on restart
+
+```bash
+# On VM
+wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+tar xvzf ngrok-v3-stable-linux-amd64.tgz
+sudo mv ngrok /usr/local/bin/
+
+# Get token from https://dashboard.ngrok.com/get-started/your-authtoken
+ngrok config add-authtoken YOUR_TOKEN
+
+# Run tunnel
+ngrok http 5984
+```
+
+You'll get: `https://abc123.ngrok.io`
+
+</details>
+
+#### Recommendation by Use Case:
+
+| Use Case | Best Option |
+|----------|-------------|
+| Home + mobile only | **Tailscale** |
+| Need work computer access | **DuckDNS + Caddy** |
+| Want your own domain | **Custom Domain + Caddy** |
+| Already use Cloudflare | **Cloudflare Tunnel** |
+| Just testing | **ngrok** |
 
 ---
 
@@ -624,26 +855,43 @@ Use this checklist to track your progress:
   - [ ] Set `COUCHDB_PASSWORD` secret
   - [ ] Set `TAILSCALE_AUTH_KEY` secret (optional)
 - [ ] **Step 6**: Push to main and deploy
-- [ ] **Step 7**: Configure Obsidian LiveSync on all devices
+- [ ] **Step 7**: Configure Obsidian LiveSync (desktop only for initial setup)
+- [ ] **Step 7.5**: Add HTTPS for mobile access
+  - [ ] Choose HTTPS solution (Tailscale, DuckDNS+Caddy, or Custom Domain)
+  - [ ] Set up chosen solution
+  - [ ] Test HTTPS URL in browser
+  - [ ] Update firewall if using Caddy (allow port 443)
 - [ ] **Step 8**: (Optional) Set up Git + LLM integration
   - [ ] Install Obsidian Git plugin (desktop)
   - [ ] Initialize git in vault
   - [ ] Create GitHub repo for vault
   - [ ] Configure auto-commit/push
   - [ ] Add vault repo to Claude.ai Projects
-- [ ] **Step 9**: Restrict firewall or enable Tailscale
+- [ ] **Step 9**: Configure Obsidian LiveSync on mobile with HTTPS URL
+- [ ] **Step 10**: Restrict firewall or enable Tailscale for additional security
 
 ---
 
 ## Resources
 
+### Core Services
 - [Obsidian Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync)
 - [Obsidian Git Plugin](https://github.com/denolehov/obsidian-git)
 - [CouchDB Documentation](https://docs.couchdb.org/)
 - [GCP Free Tier](https://cloud.google.com/free)
 - [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
-- [Tailscale](https://tailscale.com/)
-- [Claude.ai Projects](https://claude.ai)
+
+### HTTPS Solutions
+- [Tailscale](https://tailscale.com/) - Private VPN networking
+- [DuckDNS](https://www.duckdns.org/) - Free dynamic DNS subdomain
+- [Caddy](https://caddyserver.com/) - Automatic HTTPS with Let's Encrypt
+- [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) - Secure tunnel with DDoS protection
+- [ngrok](https://ngrok.com/) - Quick HTTPS tunnels for testing
+
+### AI Integration
+- [Claude.ai Projects](https://claude.ai) - Connect your notes to Claude
+- [GitHub Copilot](https://github.com/features/copilot) - AI coding assistant
+- [Cursor](https://cursor.sh/) - AI-powered code editor
 
 ---
 

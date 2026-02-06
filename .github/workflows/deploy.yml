@@ -88,6 +88,9 @@ env:
   TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
   TF_VAR_couchdb_password: ${{ secrets.COUCHDB_PASSWORD }}
   TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
+  TF_VAR_enable_https: ${{ vars.ENABLE_HTTPS }}
+  TF_VAR_duckdns_subdomain: ${{ vars.DUCKDNS_SUBDOMAIN }}
+  TF_VAR_duckdns_token: ${{ secrets.DUCKDNS_TOKEN }}
   # Optional: Override defaults via GitHub variables
   # TF_VAR_region: ${{ vars.GCP_REGION }}
   # TF_VAR_zone: ${{ vars.GCP_ZONE }}

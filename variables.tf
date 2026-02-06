@@ -126,6 +126,52 @@ variable "tailscale_auth_key" {
 }
 
 # -----------------------------------------------------------------------------
+# Optional: DuckDNS + Caddy Configuration (HTTPS)
+# -----------------------------------------------------------------------------
+
+variable "enable_https" {
+  description = <<-EOT
+    Enable HTTPS with DuckDNS + Caddy.
+
+    If true, Caddy will be installed as a reverse proxy with automatic
+    Let's Encrypt certificates. Requires duckdns_subdomain and duckdns_token.
+
+    Set to false to use HTTP only (desktop only, no mobile support).
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "duckdns_subdomain" {
+  description = <<-EOT
+    DuckDNS subdomain (e.g., "obsidian-yourname").
+
+    Get a free subdomain from: https://www.duckdns.org/
+    - Sign in with Google/GitHub
+    - Create a subdomain
+    - Your full domain will be: subdomain.duckdns.org
+
+    Only used if enable_https = true.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "duckdns_token" {
+  description = <<-EOT
+    DuckDNS token for DNS updates.
+
+    Get this from: https://www.duckdns.org/ (shown after login)
+
+    Only used if enable_https = true.
+    Security: Stored in Terraform state and VM metadata.
+  EOT
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# -----------------------------------------------------------------------------
 # Optional: Terraform State Backend (for reference)
 # -----------------------------------------------------------------------------
 # These variables are used if you configure a GCS backend for state storage.

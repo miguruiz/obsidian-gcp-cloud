@@ -54,6 +54,25 @@ resource "google_compute_firewall" "allow_ssh" {
   target_tags   = ["couchdb-server"]
 }
 
+# HTTPS access firewall rule (for Caddy reverse proxy)
+# Only enabled if enable_https is true
+resource "google_compute_firewall" "allow_https" {
+  count   = var.enable_https ? 1 : 0
+  name    = "allow-https-couchdb-vm"
+  network = "default"
+  project = var.project_id
+
+  description = "Allow HTTPS access for Caddy reverse proxy (required for mobile Obsidian)"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["443"]
+  }
+
+  source_ranges = ["0.0.0.0/0"] # HTTPS is public by design
+  target_tags   = ["couchdb-server"]
+}
+
 # -----------------------------------------------------------------------------
 # Compute Instance - CouchDB Server
 # -----------------------------------------------------------------------------
@@ -220,11 +239,136 @@ resource "google_compute_instance" "obsidian_couchdb_vm" {
     fi
 
     # --------------------------------------------------------------------------
+    # Optional: Install and Configure DuckDNS + Caddy (HTTPS)
+    # --------------------------------------------------------------------------
+    # Caddy provides automatic HTTPS with Let's Encrypt certificates
+    # DuckDNS provides a free dynamic DNS subdomain
+    ENABLE_HTTPS='${var.enable_https}'
+    DUCKDNS_SUBDOMAIN='${var.duckdns_subdomain}'
+    DUCKDNS_TOKEN='${var.duckdns_token}'
+
+    if [ "$ENABLE_HTTPS" = "true" ]; then
+      echo ">>> Setting up HTTPS with DuckDNS + Caddy..."
+
+      # Validate required variables
+      if [ -z "$DUCKDNS_SUBDOMAIN" ] || [ -z "$DUCKDNS_TOKEN" ]; then
+        echo ">>> ERROR: HTTPS enabled but duckdns_subdomain or duckdns_token not set!"
+        echo ">>> Skipping HTTPS setup. CouchDB will only be available via HTTP."
+      else
+        # Get external IP for DuckDNS
+        EXTERNAL_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H 'Metadata-Flavor: Google')
+        echo ">>> External IP: $EXTERNAL_IP"
+
+        # --------------------
+        # Set up DuckDNS
+        # --------------------
+        echo ">>> Configuring DuckDNS auto-updater..."
+
+        mkdir -p /opt/duckdns
+
+        # Create DuckDNS update script
+        cat > /opt/duckdns/duck.sh <<DUCKDNS_SCRIPT
+#!/bin/bash
+echo url="https://www.duckdns.org/update?domains=$DUCKDNS_SUBDOMAIN&token=$DUCKDNS_TOKEN&ip=" | curl -k -o /opt/duckdns/duck.log -K -
+DUCKDNS_SCRIPT
+
+        chmod +x /opt/duckdns/duck.sh
+
+        # Run initial update
+        /opt/duckdns/duck.sh
+
+        if grep -q "OK" /opt/duckdns/duck.log; then
+          echo ">>> DuckDNS updated successfully!"
+          echo ">>> Your domain: $DUCKDNS_SUBDOMAIN.duckdns.org"
+        else
+          echo ">>> WARNING: DuckDNS update failed. Check token and subdomain."
+          cat /opt/duckdns/duck.log
+        fi
+
+        # Add to crontab (updates every 5 minutes)
+        (crontab -l 2>/dev/null; echo "*/5 * * * * /opt/duckdns/duck.sh >/dev/null 2>&1") | crontab -
+        echo ">>> DuckDNS auto-updater configured (runs every 5 min)"
+
+        # --------------------
+        # Install Caddy
+        # --------------------
+        echo ">>> Installing Caddy..."
+
+        # Add Caddy repository
+        apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+
+        # Install Caddy
+        apt-get update -y
+        apt-get install -y caddy
+
+        echo ">>> Caddy installed successfully"
+
+        # --------------------
+        # Configure Caddy
+        # --------------------
+        echo ">>> Configuring Caddy for HTTPS..."
+
+        # Create Caddyfile
+        cat > /etc/caddy/Caddyfile <<CADDYFILE
+$DUCKDNS_SUBDOMAIN.duckdns.org {
+    reverse_proxy localhost:5984
+
+    # Optional: Add security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "DENY"
+        # Prevent MIME sniffing
+        X-Content-Type-Options "nosniff"
+    }
+}
+CADDYFILE
+
+        # Restart Caddy to apply configuration
+        systemctl restart caddy
+        systemctl enable caddy
+
+        # Wait for Caddy to get certificate
+        echo ">>> Waiting for Let's Encrypt certificate (may take 30-60 seconds)..."
+        sleep 10
+
+        # Check Caddy status
+        if systemctl is-active --quiet caddy; then
+          echo ">>> Caddy is running!"
+          echo ">>> HTTPS URL: https://$DUCKDNS_SUBDOMAIN.duckdns.org"
+          echo ">>> Testing HTTPS (may take a minute for DNS to propagate)..."
+        else
+          echo ">>> WARNING: Caddy failed to start. Check logs:"
+          journalctl -u caddy -n 50 --no-pager
+        fi
+      fi
+    else
+      echo ">>> HTTPS not enabled (enable_https = false)"
+      echo ">>> To add HTTPS later:"
+      echo ">>>   1. Set enable_https = true in terraform.tfvars"
+      echo ">>>   2. Set duckdns_subdomain and duckdns_token"
+      echo ">>>   3. Redeploy with terraform apply"
+    fi
+
+    # --------------------------------------------------------------------------
     # Setup Complete
     # --------------------------------------------------------------------------
     echo "=== CouchDB Setup Completed at $(date) ==="
-    echo ">>> CouchDB URL: http://$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H 'Metadata-Flavor: Google'):5984"
-    echo ">>> Admin UI (Fauxton): http://$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H 'Metadata-Flavor: Google'):5984/_utils"
+
+    # Get external IP
+    EXTERNAL_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H 'Metadata-Flavor: Google')
+
+    # Show access URLs
+    echo ">>> CouchDB HTTP URL: http://$EXTERNAL_IP:5984"
+    echo ">>> Admin UI (Fauxton): http://$EXTERNAL_IP:5984/_utils"
+
+    if [ "$ENABLE_HTTPS" = "true" ] && [ -n "$DUCKDNS_SUBDOMAIN" ]; then
+      echo ">>> CouchDB HTTPS URL: https://$DUCKDNS_SUBDOMAIN.duckdns.org"
+      echo ">>> Use the HTTPS URL in Obsidian for mobile support!"
+    fi
   SCRIPT
 
   # Service account for the VM (uses default compute service account)

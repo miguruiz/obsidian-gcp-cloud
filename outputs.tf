@@ -40,6 +40,11 @@ output "couchdb_admin_ui" {
   value       = "http://${google_compute_instance.obsidian_couchdb_vm.network_interface[0].access_config[0].nat_ip}:5984/_utils"
 }
 
+output "couchdb_https_url" {
+  description = "CouchDB HTTPS URL (if HTTPS is enabled)"
+  value       = var.enable_https && var.duckdns_subdomain != "" ? "https://${var.duckdns_subdomain}.duckdns.org" : "HTTPS not enabled"
+}
+
 # -----------------------------------------------------------------------------
 # SSH Access (for debugging)
 # -----------------------------------------------------------------------------
