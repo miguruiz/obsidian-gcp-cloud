@@ -32,6 +32,7 @@ env:
 permissions:
   contents: read
   id-token: write # Required for OIDC
+  issues: write   # Required for manual approval action
 
 jobs:
   # ===========================================================================
@@ -126,43 +127,56 @@ jobs:
     needs: terraform-destroy-plan
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Manual Approval Required
         uses: trstringer/manual-approval@v1
         timeout-minutes: 60
         with:
-          secret: ${{ github.TOKEN }}
+          secret: ${{ secrets.GITHUB_TOKEN }}
           approvers: miguruiz
           minimum-approvals: 1
-          issue-title: "🔥 Approve Terraform Destroy"
+          issue-title: "🔥 Approve Terraform Destroy - Run #${{ github.run_number }}"
           issue-body: |
             ## ⚠️ Terraform Destroy Approval Required
 
-            **Workflow:** ${{ github.workflow }}
-            **Run:** ${{ github.run_id }}
+            **Workflow Run:** [${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
             **Triggered by:** @${{ github.actor }}
+            **Branch:** ${{ github.ref_name }}
+
+            ---
 
             ### 📋 Review the Destroy Plan
 
-            1. Go to the workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            2. Review the "Show Destroy Plan" job output
-            3. Verify that you want to destroy these resources
+            **Before approving:**
+            1. Click the workflow run link above
+            2. Review the **"Show Destroy Plan"** job output
+            3. Verify the resources to be destroyed are correct
 
-            ### ✅ To Approve
+            ---
 
-            Comment on this issue with:
+            ### ✅ To APPROVE (Destroy Infrastructure)
+
+            Comment on this issue:
             ```
             /approve
             ```
 
-            ### ❌ To Reject
+            ### ❌ To REJECT (Cancel Destroy)
 
-            Close this issue or comment:
+            Comment on this issue:
             ```
             /deny
             ```
 
+            Or simply **close this issue** to cancel.
+
             ---
-            **⏰ This approval will timeout in 60 minutes.**
+
+            ⏰ **Timeout:** This approval request expires in 60 minutes.
+
+            🔗 **Workflow:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
   # ===========================================================================
   # Terraform Destroy - Actually destroys the infrastructure
