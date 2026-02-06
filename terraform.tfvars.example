@@ -27,22 +27,21 @@ couchdb_user     = "admin"
 couchdb_password = "CHANGE_ME_use_a_strong_password_here_min_12_chars"
 
 # -----------------------------------------------------------------------------
-# Network Security (IMPORTANT - Restrict after initial setup!)
+# Network Security (Port 5984 - Direct CouchDB Access)
 # -----------------------------------------------------------------------------
-# WARNING: Default allows ALL IPs. This is INSECURE!
+# Default: [] (closed) - Recommended when using HTTPS or Tailscale
 #
-# For initial testing only:
-# allowed_ips = ["0.0.0.0/0"]
+# With HTTPS: All traffic goes through port 443 (Caddy), no need for port 5984
+# With Tailscale: Access via private VPN, no public ports needed
 #
-# After initial setup, restrict to your IP:
-# allowed_ips = ["YOUR.HOME.IP.ADDRESS/32"]
+# Leave as [] (closed) for security:
+# allowed_ips = []
 #
-# Find your IP: curl ifconfig.me
-#
-# Multiple IPs example:
-# allowed_ips = ["1.2.3.4/32", "5.6.7.8/32"]
+# Only open if you need direct HTTP access (not recommended):
+# allowed_ips = ["YOUR.IP.ADDRESS/32"]  # Specific IP only
+# allowed_ips = ["0.0.0.0/0"]           # Public (INSECURE!)
 
-allowed_ips = ["0.0.0.0/0"]  # CHANGE THIS AFTER INITIAL SETUP!
+allowed_ips = []  # Secure default - use HTTPS or Tailscale
 
 # SSH access (leave empty to disable SSH firewall rule - recommended)
 # ssh_allowed_ips = ["YOUR.IP.ADDRESS/32"]

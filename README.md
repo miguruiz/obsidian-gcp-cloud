@@ -444,117 +444,17 @@ tailscale ip -4
 
 </details>
 
-<details>
-<summary><b>Option 3: Custom Domain + Caddy (If You Own a Domain)</b></summary>
+#### ✅ Recommended Setup
 
-**Pros:** Your own domain, professional
-**Cons:** Costs $10/year for domain
+**For your use case (work computer + secure home/mobile):**
 
-**Setup:**
+Use **both Tailscale and DuckDNS** as configured above (Options 1 + 2).
 
-1. **Buy a domain** (Namecheap, Porkbun, Google Domains, etc.)
-
-2. **Point DNS A record** to your VM's external IP:
-   ```
-   Type: A
-   Name: obsidian (or @)
-   Value: YOUR_VM_IP
-   TTL: 300
-   ```
-
-3. **Update firewall** (same as DuckDNS option above)
-
-4. **On your VM:**
-   ```bash
-   # Install Caddy (same as DuckDNS)
-   sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-   sudo apt update
-   sudo apt install caddy
-
-   # Configure Caddy
-   sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
-   obsidian.yourdomain.com {
-       reverse_proxy localhost:5984
-   }
-   EOF
-
-   sudo systemctl restart caddy
-   sudo systemctl enable caddy
-   ```
-
-**In Obsidian:** `https://obsidian.yourdomain.com`
-
-</details>
-
-<details>
-<summary><b>Option 4: Cloudflare Tunnel (If You Have a Domain in Cloudflare)</b></summary>
-
-**Pros:** DDoS protection, works through firewalls
-**Cons:** Requires domain in Cloudflare, more complex
-
-**Setup:**
-
-1. **Add your domain to Cloudflare** (free plan)
-
-2. **On your VM:**
-   ```bash
-   # Install cloudflared
-   wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-   sudo dpkg -i cloudflared-linux-amd64.deb
-
-   # Authenticate
-   cloudflared tunnel login
-   ```
-
-3. **In Cloudflare Dashboard:**
-   - Go to https://one.dash.cloudflare.com/
-   - Networks → Tunnels → Create tunnel
-   - Name: `obsidian-couchdb`
-   - Copy the install command and run on VM
-
-4. **Configure public hostname:**
-   - Subdomain: `obsidian`
-   - Domain: `yourdomain.com`
-   - Service: `http://localhost:5984`
-
-**In Obsidian:** `https://obsidian.yourdomain.com`
-
-</details>
-
-<details>
-<summary><b>Option 5: ngrok (Quick Testing Only)</b></summary>
-
-**Pros:** Instant setup, no domain needed
-**Cons:** Free tier gives random URL that changes on restart
-
-```bash
-# On VM
-wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
-tar xvzf ngrok-v3-stable-linux-amd64.tgz
-sudo mv ngrok /usr/local/bin/
-
-# Get token from https://dashboard.ngrok.com/get-started/your-authtoken
-ngrok config add-authtoken YOUR_TOKEN
-
-# Run tunnel
-ngrok http 5984
-```
-
-You'll get: `https://abc123.ngrok.io`
-
-</details>
-
-#### Recommendation by Use Case:
-
-| Use Case | Best Option |
-|----------|-------------|
-| Home + mobile only | **Tailscale** |
-| Need work computer access | **DuckDNS + Caddy** |
-| Want your own domain | **Custom Domain + Caddy** |
-| Already use Cloudflare | **Cloudflare Tunnel** |
-| Just testing | **ngrok** |
+This gives you:
+- 🏠 **Home/Mobile**: Tailscale (`http://100.x.x.x:5984`) - Private & Secure
+- 💼 **Work Computer**: HTTPS (`https://obsidian-yourname.duckdns.org`) - No Tailscale needed
+- 🔒 **Port 5984**: Closed (no direct access)
+- 🔐 **Security**: Excellent
 
 ---
 
@@ -634,52 +534,73 @@ git push -u origin main
 
 ## Security Recommendations
 
-### CRITICAL: Restrict Firewall After Initial Setup
+### Understanding Firewall Rules
 
-The default `allowed_ips = ["0.0.0.0/0"]` allows **anyone** to access your CouchDB!
+Your setup has **different ports** depending on your configuration:
 
-**Option A: Restrict to Your IP**
-1. Find your IP: `curl ifconfig.me`
-2. Update `terraform.tfvars`:
-   ```hcl
-   allowed_ips = ["YOUR.IP.ADDRESS/32"]
-   ```
-3. Push the change to trigger a new deployment
+| Port | Service | When Open | Security |
+|------|---------|-----------|----------|
+| **5984** | CouchDB (HTTP) | Controlled by `allowed_ips` | ⚠️ Unencrypted |
+| **443** | Caddy (HTTPS) | When `enable_https = true` | ✅ Encrypted |
+| **Tailscale** | Private VPN | When auth key provided | ✅ Encrypted + Private |
 
-**Option B: Use Tailscale (Recommended)**
+---
 
-If you added `TAILSCALE_AUTH_KEY` as a GitHub secret, Tailscale is already installed!
+### 🔒 Recommended Security Configuration
 
-1. **Get your VM's Tailscale IP**:
-   ```bash
-   gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a --project=YOUR_PROJECT_ID
-   tailscale ip -4  # Shows your 100.x.x.x IP
-   ```
+**Tailscale + HTTPS (Best of Both Worlds)**
 
-2. **Update Obsidian LiveSync** to use the Tailscale IP:
-   - Server URL: `http://100.x.x.x:5984`
+This is the most secure and flexible setup:
 
-3. **Close the public firewall**:
-   ```hcl
-   # In terraform.tfvars
-   allowed_ips = []
-   ```
-   Push to redeploy.
+**Configuration:**
+```hcl
+# terraform.tfvars (or GitHub Variables/Secrets)
+enable_https = true
+duckdns_subdomain = "obsidian-yourname"
+duckdns_token = "your-token"
+tailscale_auth_key = "tskey-auth-..."
 
-4. **Install Tailscale on your devices**:
-   - Desktop: https://tailscale.com/download
-   - Mobile: Install from App Store / Play Store
+allowed_ips = []  # ← Port 5984 closed (secure default)
+```
 
-Now your CouchDB is **only accessible over your private Tailscale network**!
+**Result:**
+- ✅ Port 443 (HTTPS) open → Work computer access
+- ✅ Tailscale network → Secure home/mobile access
+- ✅ Port 5984 closed → No direct CouchDB exposure
+- ✅ Auto-configured → Zero manual steps
 
-### Other Security Options
+**Usage:**
+- 💼 **Work Computer**: `https://obsidian-yourname.duckdns.org`
+- 🏠 **Home (Desktop with Tailscale)**: `http://100.x.x.x:5984`
+- 📱 **Mobile (with Tailscale app)**: `http://100.x.x.x:5984`
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **Tailscale** | Zero-config, free for personal, no open ports | Requires Tailscale on all devices |
-| **Cloudflare Tunnel** | Free, adds HTTPS, DDoS protection | More complex setup |
-| **Caddy + Let's Encrypt** | Free HTTPS, standard approach | Needs domain, more config |
-| **IP Allowlist** | Simple | IP may change, manual updates |
+**Get Tailscale IP:**
+```bash
+gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a
+tailscale ip -4  # Shows 100.x.x.x
+```
+
+**Security Level:** ⭐⭐⭐⭐⭐ Excellent
+- HTTPS encryption for work access
+- Private VPN for personal devices
+- No exposed unencrypted ports
+- Multiple layers of authentication
+
+---
+
+### ⚠️ Important Notes
+
+**✅ DO:**
+- Use the default `allowed_ips = []` (port 5984 closed)
+- Enable both HTTPS and Tailscale for maximum flexibility
+- Install Tailscale app on all personal devices
+
+**❌ DON'T:**
+- Open port 5984 to public (`allowed_ips = ["0.0.0.0/0"]`) - unnecessary and insecure
+- Use HTTP without Tailscale - vulnerable to attacks
+- Skip Tailscale - you'll lose the most secure access method
+
+---
 
 ---
 

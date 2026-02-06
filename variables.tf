@@ -72,21 +72,19 @@ variable "allowed_ips" {
   description = <<-EOT
     List of IP ranges allowed to access CouchDB (port 5984).
 
-    SECURITY WARNING: The default ["0.0.0.0/0"] allows access from ANYWHERE!
-    This is ONLY acceptable for initial testing.
+    DEFAULT: [] (closed) - Recommended when using HTTPS or Tailscale.
 
-    After deployment, IMMEDIATELY restrict this to your specific IP(s):
-      - Your home IP: ["YOUR.HOME.IP.ADDRESS/32"]
-      - Multiple IPs: ["IP1/32", "IP2/32"]
-      - VPN range: ["10.0.0.0/8"]
+    With HTTPS enabled, all traffic goes through port 443 (Caddy).
+    With Tailscale, access via private VPN (no public ports needed).
 
-    Better alternatives for production:
-      - Use Tailscale (private network, no open ports)
-      - Use Cloudflare Tunnel
-      - Use a VPN
+    Only open port 5984 if you need direct HTTP access:
+      - For specific IP: ["YOUR.IP.ADDRESS/32"]
+      - For testing ONLY: ["0.0.0.0/0"] (WARNING: Insecure!)
+
+    Recommended: Leave empty [] and use HTTPS or Tailscale.
   EOT
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = [] # Secure by default - no direct CouchDB access
 }
 
 variable "ssh_allowed_ips" {
