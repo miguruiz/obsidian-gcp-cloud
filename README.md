@@ -173,7 +173,7 @@ gcloud services enable sts.googleapis.com --project=$PROJECT_ID
 
 ---
 
-### MANUAL STEP 2: Create GCS Bucket for Terraform State
+### 2️⃣ Create GCS Bucket for Terraform State
 
 Terraform state must be stored remotely for CI/CD to work.
 
@@ -187,20 +187,18 @@ gsutil mb -p $PROJECT_ID -l us-central1 -b on gs://$BUCKET_NAME
 
 # Enable versioning (allows state recovery if something goes wrong)
 gsutil versioning set on gs://$BUCKET_NAME
-
-# Save this bucket name - you'll need it later!
-echo "IMPORTANT: Save this bucket name: $BUCKET_NAME"
 ```
 
-After creating the bucket, update `backend.tf`:
-1. Uncomment the `backend "gcs"` block (if commented)
-2. Replace the bucket name with your actual bucket name
+> [!IMPORTANT]
+> **After creating the bucket, update `backend.tf`:**
+> 1.  Uncomment the `backend "gcs"` block.
+> 2.  Replace the `bucket` name with your actual bucket name.
 
 ---
 
-### MANUAL STEP 3: Set Up Workload Identity Federation
+### 3️⃣ Set Up Workload Identity Federation
 
-This is the most complex manual step. Workload Identity Federation allows GitHub Actions to authenticate to GCP **without storing any long-lived keys**.
+This allows GitHub Actions to authenticate to GCP **without storing any long-lived keys**.
 
 #### 3.1 Create a Workload Identity Pool
 
@@ -274,31 +272,23 @@ gcloud iam workload-identity-pools providers describe github-provider \
   --format="value(name)"
 ```
 
-Save this output—it looks like:
-```
-projects/123456789/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider
-```
-
-**Official Documentation**: [Workload Identity Federation for GitHub Actions](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines)
+Save the output—it looks like:
+`projects/123456789/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider`
 
 ---
 
-### MANUAL STEP 4: (Optional) Get Tailscale Auth Key
+### 4️⃣ (Optional) Get Tailscale Auth Key
 
 If you want **automated Tailscale installation** (highly recommended for security):
 
-1. Go to https://login.tailscale.com/admin/settings/keys
-2. Click "Generate auth key"
-3. Settings:
-   - ✅ **Reusable** (so VM can reconnect after restarts)
-   - Set expiration or make it non-expiring for personal use
-4. Copy the key (starts with `tskey-auth-...`)
-
-You'll add this as a GitHub secret in the next step.
+1.  Go to [Tailscale Keys](https://login.tailscale.com/admin/settings/keys).
+2.  Click **Generate auth key**.
+3.  Settings: ✅ **Reusable**, set expiration as preferred.
+4.  Copy the key (starts with `tskey-auth-...`).
 
 ---
 
-### MANUAL STEP 5: Configure GitHub Repository
+### 5️⃣ Configure GitHub Repository
 
 #### 5.1 Create the Repository
 
@@ -307,27 +297,26 @@ You'll add this as a GitHub secret in the next step.
 gh repo create obsidian-gce-couchdb --private
 ```
 
-#### 5.2 Set GitHub Variables (Settings → Secrets and variables → Actions → Variables)
+#### 5.2 Set GitHub Variables
 
 | Variable Name | Value |
-|--------------|-------|
+| :--- | :--- |
 | `GCP_PROJECT_ID` | Your GCP project ID |
 | `WIF_PROVIDER` | Full provider name from Step 3.6 |
 | `WIF_SERVICE_ACCOUNT` | `terraform-github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com` |
 
-#### 5.3 Set GitHub Secrets (Settings → Secrets and variables → Actions → Secrets)
+#### 5.3 Set GitHub Secrets
 
 | Secret Name | Value | Required? |
-|------------|-------|-----------|
+| :--- | :--- | :---: |
 | `COUCHDB_PASSWORD` | A strong password (min 12 characters) | ✅ Required |
-| `TAILSCALE_AUTH_KEY` | Tailscale auth key from Step 4 | ⚙️ Optional (but recommended) |
+| `TAILSCALE_AUTH_KEY` | Tailscale auth key from Step 4 | ⚙️ Optional |
 
 ---
 
-### STEP 6: Deploy via CI/CD
+### 6️⃣ Deploy via CI/CD
 
-1. Copy `terraform.tfvars.example` to `terraform.tfvars` (for local testing only, don't commit it)
-2. Push to `main` branch:
+1.  Push to `main` branch:
 
 ```bash
 git add .
@@ -335,547 +324,126 @@ git commit -m "Initial deployment"
 git push origin main
 ```
 
-3. Watch the GitHub Actions workflow run
-4. Check the workflow summary for outputs (VM IP, CouchDB URL)
-5. Wait 2-3 minutes for the startup script to complete
+2.  Watch the GitHub Actions workflow run.
+3.  Check the workflow summary for outputs (**VM IP**, **CouchDB URL**).
+4.  Wait 2-3 minutes for the startup script to complete.
 
 ---
 
-### STEP 7: Configure Obsidian LiveSync (Desktop Only - Initial Setup)
+### 7️⃣ Configure Obsidian LiveSync (Desktop)
 
-1. Get the CouchDB URL from Terraform outputs or GitHub Actions summary
-2. In Obsidian **desktop**, install the "Self-hosted LiveSync" plugin
-3. Configure the plugin:
-   - **Server URL**: `http://YOUR_VM_IP:5984`
-   - **Username**: `admin` (or your configured username)
-   - **Password**: Your CouchDB password
-   - **Database**: `obsidian` (or any name you prefer)
-   - **End-to-end encryption**: Enable and set a passphrase
+1.  In Obsidian, install the **Self-hosted LiveSync** plugin.
+2.  Configure the plugin:
+    *   **Server URL**: `http://YOUR_VM_IP:5984`
+    *   **Username**: `admin`
+    *   **Password**: Your CouchDB password
+    *   **Database**: `obsidian`
+    *   **End-to-end encryption**: Enable and set a passphrase.
 
-**Note:** Mobile requires HTTPS - see Step 7.5 below.
+> [!WARNING]
+> **Mobile requires HTTPS** - see Step 7.5.
 
 ---
 
-### STEP 7.5: Add HTTPS for Mobile Access (REQUIRED for Mobile)
+### 7.5️⃣ Add HTTPS for Mobile Access (REQUIRED)
 
-⚠️ **Mobile Obsidian requires HTTPS**. You have several options:
-
-#### Choose Your HTTPS Solution:
+Mobile Obsidian requires HTTPS. Choose one of the following:
 
 <details>
-<summary><b>Option 1: Tailscale (Recommended for Home/Personal Use)</b></summary>
+<summary><b>Option 1: Tailscale (Recommended)</b></summary>
 
-**Pros:** Private VPN, works with HTTP, most secure
-**Cons:** Requires Tailscale app on all devices, may not work on work computers
+*   **Pros**: Private VPN, most secure.
+*   **Cons**: Requires Tailscale app on all devices.
 
-**If you set `TAILSCALE_AUTH_KEY`**, Tailscale is already installed. Otherwise:
-
-```bash
-# SSH to your VM
-gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a --project=YOUR_PROJECT_ID
-
-# Install Tailscale
-curl -fsSL https://tailscale.com/install.sh | sh
-
-# Start Tailscale (opens browser for auth)
-sudo tailscale up
-
-# Get your Tailscale IP
-tailscale ip -4
-```
-
-**On all devices:**
-1. Install Tailscale app
-2. Log in to same Tailscale account
-3. Use `http://100.x.x.x:5984` in Obsidian (works on mobile even though HTTP!)
+Use `http://100.x.x.x:5984` (Tailscale IP) even though it's HTTP, mobile apps usually allow it over local/VPN networks.
 
 </details>
 
 <details>
-<summary><b>Option 2: DuckDNS + Caddy (Recommended for Universal Access)</b></summary>
+<summary><b>Option 2: DuckDNS + Caddy (Universal Access)</b></summary>
 
-**Pros:** Free HTTPS subdomain, works everywhere (home, work, mobile)
-**Cons:** 10-minute setup, requires firewall to allow port 443
-
-**Setup:**
-
-1. **Get a free DuckDNS subdomain:**
-   - Go to https://www.duckdns.org/
-   - Sign in with Google/GitHub/Reddit
-   - Create subdomain: `obsidian-yourname`
-   - Point it to your VM's external IP
-   - Copy your DuckDNS token
-
-2. **Update GCP firewall to allow HTTPS:**
-
-   Add to `main.tf` or run:
-   ```bash
-   gcloud compute firewall-rules create allow-https \
-     --project=YOUR_PROJECT_ID \
-     --allow=tcp:443 \
-     --source-ranges=0.0.0.0/0 \
-     --target-tags=couchdb-server
-   ```
-
-3. **On your VM, set up DuckDNS updater:**
-   ```bash
-   # SSH to VM
-   gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a
-
-   # Create DuckDNS update script
-   mkdir -p ~/duckdns
-   cat > ~/duckdns/duck.sh <<EOF
-   #!/bin/bash
-   echo url="https://www.duckdns.org/update?domains=YOUR_SUBDOMAIN&token=YOUR_TOKEN&ip=" | curl -k -o ~/duckdns/duck.log -K -
-   EOF
-   chmod +x ~/duckdns/duck.sh
-
-   # Test it
-   ~/duckdns/duck.sh
-   cat ~/duckdns/duck.log  # Should say "OK"
-
-   # Add to crontab (updates every 5 min)
-   (crontab -l 2>/dev/null; echo "*/5 * * * * ~/duckdns/duck.sh >/dev/null 2>&1") | crontab -
-   ```
-
-4. **Install Caddy (automatic HTTPS with Let's Encrypt):**
-   ```bash
-   # Install Caddy
-   sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-   sudo apt update
-   sudo apt install caddy
-
-   # Configure Caddy (replace with your subdomain)
-   sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
-   obsidian-yourname.duckdns.org {
-       reverse_proxy localhost:5984
-   }
-   EOF
-
-   # Restart Caddy
-   sudo systemctl restart caddy
-   sudo systemctl enable caddy
-
-   # Check status
-   sudo systemctl status caddy
-   ```
-
-5. **Wait 1-2 minutes for Let's Encrypt certificate**
-
-6. **Test in browser:** `https://obsidian-yourname.duckdns.org`
-
-**In Obsidian (all devices):**
-- Server URL: `https://obsidian-yourname.duckdns.org`
+*   **Pros**: Free HTTPS subdomain, works everywhere.
+*   **Cons**: Requires port 443 open to the internet.
 
 </details>
 
-#### ✅ Recommended Setup
+---
 
-**For your use case (work computer + secure home/mobile):**
+### 8️⃣ (Optional) Set Up Git for LLM Integration
 
-Use **both Tailscale and DuckDNS** as configured above (Options 1 + 2).
+If you want to make your notes accessible to **Claude.ai**, **GitHub Copilot**, or other LLMs:
 
-This gives you:
-- 🏠 **Home/Mobile**: Tailscale (`http://100.x.x.x:5984`) - Private & Secure
-- 💼 **Work Computer**: HTTPS (`https://obsidian-yourname.duckdns.org`) - No Tailscale needed
-- 🔒 **Port 5984**: Closed (no direct access)
-- 🔐 **Security**: Excellent
+1.  Install the **Obsidian Git** plugin.
+2.  Initialize Git in your vault and push to a **private** GitHub repo.
+3.  Connect the repo to Claude.ai Projects or Copilot.
 
 ---
 
-### STEP 8 (Optional): Set Up Git for LLM Integration
+### 9️⃣ Syncing Plugins & Customizations (Cheat Sheet)
 
-If you want to make your notes accessible to Claude.ai, GitHub Copilot, or other LLMs:
-
-#### 8.1 Install Obsidian Git Plugin (Desktop Only)
-
-1. Obsidian → Settings → Community plugins → Browse
-2. Search "Obsidian Git"
-3. Install and enable
-
-#### 8.2 Initialize Git in Your Vault
-
-```bash
-cd /path/to/your/ObsidianVault
-
-# Initialize git
-git init
-
-# Create .gitignore
-cat > .gitignore << 'EOF'
-# Obsidian workspace and cache
-.obsidian/workspace*.json
-.obsidian/cache/
-
-# Keep core config
-!.obsidian/app.json
-!.obsidian/appearance.json
-!.obsidian/community-plugins.json
-
-# Exclude LiveSync database (binary, not useful for AI)
-.obsidian/plugins/obsidian-livesync/
-
-# OS files
-.DS_Store
-Thumbs.db
-EOF
-
-# Initial commit
-git add .
-git commit -m "Initial vault backup"
-```
-
-#### 8.3 Create GitHub Repo for Your Vault
-
-```bash
-# Create a PRIVATE repo for your notes
-gh repo create my-obsidian-vault --private
-
-# Push your vault
-git remote add origin https://github.com/yourusername/my-obsidian-vault.git
-git push -u origin main
-```
-
-#### 8.4 Configure Obsidian Git Plugin
-
-- Settings → Obsidian Git:
-  - **Auto backup interval**: 60 minutes (or as preferred)
-  - **Auto pull on startup**: Enabled
-  - **Auto push**: Enabled
-  - **Commit message**: `vault backup: {{date}}`
-
-#### 8.5 Connect to Claude.ai (or Other LLMs)
-
-**For Claude.ai:**
-1. Go to https://claude.ai
-2. Create a new Project
-3. Add your GitHub repository as knowledge
-4. Now you can ask Claude to analyze, search, and summarize your notes!
-
-**For GitHub Copilot/Cursor:**
-- These will automatically have context from your vault repo when you have it open
-
----
-
-### STEP 9: Syncing Plugins & Customizations (Cheat Sheet)
-
-To sync plugins, settings, themes, and other customizations across devices using Self-hosted LiveSync:
+To sync plugins, settings, themes, and other customizations across devices:
 
 #### Prerequisites
-- Self-hosted LiveSync plugin installed and working (notes already sync via CouchDB).
-- **Unique device name** set on EVERY device BEFORE enabling Customization Sync.
-  - Location: Settings → Self-hosted LiveSync → "Device name".
-  - Examples: `adyen-mac-1`, `iphone-15`, `windows-work`.
-  - Cannot change name while Customization Sync is enabled.
+*   Unique device name set on EVERY device (**Settings → Self-hosted LiveSync → Device name**).
 
-#### Initial Setup Sequence (Do Once)
-1. **Set unique device names** on all devices.
-2. **On MAIN device** (with desired config):
-   - Enable `Customization sync` + `Scan customization automatically` in settings.
-   - Open **Customization sync dialog** (button at bottom of plugin settings).
-   - Click **Select All Shiny** (selects community-plugins.json, appearance.json, etc.).
-   - Click **Apply All Selected** to upload to CouchDB.
-3. **On SECONDARY devices**:
-   - Open **Customization sync dialog**.
-   - Select incoming changes (**Select All Shiny**).
-   - Click **Apply** (auto-installs plugins, applies themes).
-   - **Restart Obsidian** fully.
-
-#### Ongoing Behavior
-- **Automatic**: Most changes (plugins, settings, themes) propagate in the background within seconds/minutes.
-- **Manual intervention**: Only needed for rare conflicts or if a change doesn't propagate (use "Scan changes" in the dialog).
-- **Tip**: Backup your `.obsidian` folder locally before performing the first big sync.
+#### Initial Setup
+1.  **Main Device**: Enable `Customization sync`, open dialog, **Select All Shiny**, **Apply All Selected**.
+2.  **Secondary Devices**: Open dialog, **Select All Shiny**, **Apply**, then **Restart Obsidian**.
 
 ---
 
-## Security Recommendations
+## 🛡️ Security Recommendations
 
-### Understanding Firewall Rules
-
-Your setup has **different ports** depending on your configuration:
-
-| Port | Service | When Open | Security |
-|------|---------|-----------|----------|
-| **5984** | CouchDB (HTTP) | Controlled by `allowed_ips` | ⚠️ Unencrypted |
-| **443** | Caddy (HTTPS) | When `enable_https = true` | ✅ Encrypted |
-| **Tailscale** | Private VPN | When auth key provided | ✅ Encrypted + Private |
-
----
-
-### 🔒 Recommended Security Configuration
-
-**Tailscale + HTTPS (Best of Both Worlds)**
+### 🔒 Recommended Configuration: Tailscale + HTTPS
 
 This is the most secure and flexible setup:
 
-**Configuration:**
-```hcl
-# terraform.tfvars (or GitHub Variables/Secrets)
-enable_https = true
-duckdns_subdomain = "obsidian-yourname"
-duckdns_token = "your-token"
-tailscale_auth_key = "tskey-auth-..."
+*   **Port 443 (HTTPS)** open for work access.
+*   **Tailscale network** for secure home/mobile access.
+*   **Port 5984 closed** to the public internet.
 
-allowed_ips = []  # ← Port 5984 closed (secure default)
-```
+---
 
-**Result:**
-- ✅ Port 443 (HTTPS) open → Work computer access
-- ✅ Tailscale network → Secure home/mobile access
-- ✅ Port 5984 closed → No direct CouchDB exposure
-- ✅ Auto-configured → Zero manual steps
+## 🩺 Troubleshooting
 
-**Usage:**
-- 💼 **Work Computer**: `https://obsidian-yourname.duckdns.org`
-- 🏠 **Home (Desktop with Tailscale)**: `http://100.x.x.x:5984`
-- 📱 **Mobile (with Tailscale app)**: `http://100.x.x.x:5984`
-
-**Get Tailscale IP:**
+### Check Logs on the VM
 ```bash
-gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a
-tailscale ip -4  # Shows 100.x.x.x
-```
-
-**Security Level:** ⭐⭐⭐⭐⭐ Excellent
-- HTTPS encryption for work access
-- Private VPN for personal devices
-- No exposed unencrypted ports
-- Multiple layers of authentication
-
----
-
-### ⚠️ Important Notes
-
-**✅ DO:**
-- Use the default `allowed_ips = []` (port 5984 closed)
-- Enable both HTTPS and Tailscale for maximum flexibility
-- Install Tailscale app on all personal devices
-
-**❌ DON'T:**
-- Open port 5984 to public (`allowed_ips = ["0.0.0.0/0"]`) - unnecessary and insecure
-- Use HTTP without Tailscale - vulnerable to attacks
-- Skip Tailscale - you'll lose the most secure access method
-
----
-
----
-
-## Troubleshooting
-
-### Check Startup Script Logs
-
-```bash
-gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a --project=YOUR_PROJECT_ID
-
-# View startup script logs
 sudo cat /var/log/couchdb-setup.log
-
-# Check Docker container status
-sudo docker ps
 sudo docker logs obsidian-couchdb
-
-# Check Tailscale status (if enabled)
 tailscale status
 ```
 
-### Test CouchDB Locally
-
-```bash
-# From inside the VM
-curl -u admin:YOUR_PASSWORD http://localhost:5984/
-
-# Expected response:
-# {"couchdb":"Welcome","version":"3.x.x",...}
-```
-
-### Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| Can't connect to CouchDB | Wait 3 min for startup; check firewall rules; verify IP |
-| 401 Unauthorized | Check username/password in Obsidian settings |
-| GitHub Actions auth fails | Verify WIF_PROVIDER and WIF_SERVICE_ACCOUNT values |
-| Terraform state error | Ensure GCS bucket exists and backend.tf is configured |
-| Tailscale not working | Check TAILSCALE_AUTH_KEY is set; view logs on VM |
-| Git not syncing on mobile | Normal - Git plugin is desktop-only. Use LiveSync for mobile. |
-
 ---
 
-## Understanding Your Setup
-
-### What Syncs Where?
+## 🏗️ File Structure
 
 ```
-Mobile Obsidian
-    ↓ LiveSync only (Git plugin doesn't work on mobile)
-    ↓
-CouchDB (GCP VM)
-    ↑
-    ↓ LiveSync
-    ↓
-Desktop Obsidian
-    ↓ Git plugin (commits to GitHub)
-    ↓
-GitHub Repo
-    ↓ AI can read
-    ↓
-Claude.ai / Copilot / etc.
-```
-
-### Why Not Just Use Git for Everything?
-
-- **Git doesn't work well on mobile** (sandboxing limitations)
-- **Git isn't designed for real-time sync** (requires manual commits/pushes)
-- **CouchDB is purpose-built** for multi-device, multi-master replication
-- **Git adds LLM integration** that CouchDB doesn't provide
-
----
-
-## Free Tier Reminders
-
-To stay within GCP's always-free tier:
-
-| Resource | Free Tier Limit | This Setup |
-|----------|----------------|------------|
-| VM | 1 e2-micro in **us-west1/us-central1/us-east1 ONLY** | 1 e2-micro in us-central1 ✅ |
-| Disk | 30 GB pd-standard | 30 GB pd-standard ✅ |
-| Egress | 1 GB/month to internet (from North America) | Varies by sync usage ⚠️ |
-| GCS | 5 GB storage | ~KB for state file ✅ |
-
-**Tips:**
-- Don't run other e2-micro VMs in free-tier regions (limit is 1 total, not 1 per region)
-- Monitor egress if syncing large vaults frequently
-- Set up billing alerts in GCP Console
-- Only us-west1, us-central1, and us-east1 qualify for free tier
-
-**Set up a billing alert:**
-```bash
-gcloud billing budgets create \
-  --billing-account=YOUR_BILLING_ACCOUNT_ID \
-  --display-name="Free Tier Alert" \
-  --budget-amount=1USD \
-  --threshold-rule=percent=50
+obsidian-cloud/
+├── .github/workflows/
+│   └── deploy.yml             # CI/CD pipeline
+├── main.tf                    # Infrastructure
+├── docs/
+│   └── LEARNINGS.md           # Deep dive explanation
+└── README.md                  # You are here
 ```
 
 ---
 
-## LLM Integration Ideas
-
-Once your vault is in GitHub, you can:
-
-### With Claude.ai
-- "Summarize all my notes about project X"
-- "Find connections between my notes on topic A and topic B"
-- "What were my main insights from this week's journal entries?"
-- "Help me organize my notes by creating an index"
-
-### With Copilot/Cursor
-- Use your notes as context while coding
-- Reference your documentation while writing
-- Auto-complete based on your personal knowledge base
-
-### Custom Automations (GitHub Actions)
-- Daily summary emails
-- Automated tagging
-- Cross-reference finder
-- Orphaned note detector
-
----
-
-## File Structure
-
-```
-obsidian-cloud/                    # This infrastructure repo
-├── .github/
-│   └── workflows/
-│       └── deploy.yml             # CI/CD pipeline
-├── main.tf                        # VM, firewall, startup script
-├── variables.tf                   # Input variables
-├── outputs.tf                     # Output values
-├── provider.tf                    # Terraform config
-├── backend.tf                     # GCS state backend
-├── terraform.tfvars.example       # Example values
-├── .gitignore                     # Excludes secrets
-├── README.md                      # This file
-└── docs/
-    └── LEARNINGS.md               # Deep dive explanation
-
-your-obsidian-vault/               # Separate repo for your notes
-├── .obsidian/
-│   ├── app.json
-│   └── community-plugins.json
-├── Daily/
-├── Projects/
-├── Resources/
-├── .gitignore
-└── README.md                      # Vault structure for AI
-```
-
----
-
-## Manual Steps Checklist
-
-Use this checklist to track your progress:
+## ✅ Manual Steps Checklist
 
 - [ ] **Step 1**: Enable GCP APIs
-- [ ] **Step 2**: Create GCS bucket for Terraform state
-- [ ] **Step 3**: Set up Workload Identity Federation
-  - [ ] Create Workload Identity Pool
-  - [ ] Create OIDC Provider
-  - [ ] Create Service Account
-  - [ ] Grant IAM roles
-  - [ ] Allow GitHub to impersonate SA
-- [ ] **Step 4**: (Optional) Get Tailscale auth key
-- [ ] **Step 5**: Configure GitHub repository
-  - [ ] Set `GCP_PROJECT_ID` variable
-  - [ ] Set `WIF_PROVIDER` variable
-  - [ ] Set `WIF_SERVICE_ACCOUNT` variable
-  - [ ] Set `COUCHDB_PASSWORD` secret
-  - [ ] Set `TAILSCALE_AUTH_KEY` secret (optional)
-- [ ] **Step 6**: Push to main and deploy
-- [ ] **Step 7**: Configure Obsidian LiveSync (desktop only for initial setup)
-- [ ] **Step 7.5**: Add HTTPS for mobile access
-  - [ ] Choose HTTPS solution (Tailscale, DuckDNS+Caddy, or Custom Domain)
-  - [ ] Set up chosen solution
-  - [ ] Test HTTPS URL in browser
-  - [ ] Update firewall if using Caddy (allow port 443)
-- [ ] **Step 8**: (Optional) Set up Git + LLM integration
-  - [ ] Install Obsidian Git plugin (desktop)
-  - [ ] Initialize git in vault
-  - [ ] Create GitHub repo for vault
-  - [ ] Configure auto-commit/push
-  - [ ] Add vault repo to Claude.ai Projects
-- [ ] **Step 9**: Configure Obsidian LiveSync on mobile with HTTPS URL
-- [ ] **Step 10**: Restrict firewall or enable Tailscale for additional security
-- [ ] **Step 11**: (Optional) Configure Customization Sync (Plugins/Themes/Settings)
+- [ ] **Step 2**: Create GCS bucket
+- [ ] **Step 3**: Set up WIF
+- [ ] **Step 4**: (Optional) Tailscale key
+- [ ] **Step 5**: GitHub variables/secrets
+- [ ] **Step 6**: Push and deploy
+- [ ] **Step 7**: Configure Obsidian (Desktop)
+- [ ] **Step 7.5**: Add HTTPS for Mobile
+- [ ] **Step 8**: (Optional) Git + LLM integration
+- [ ] **Step 11**: (Optional) Customization Sync
 
 ---
 
-## Resources
-
-### Core Services
-- [Obsidian Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync)
-- [Obsidian Git Plugin](https://github.com/denolehov/obsidian-git)
-- [CouchDB Documentation](https://docs.couchdb.org/)
-- [GCP Free Tier](https://cloud.google.com/free)
-- [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
-
-### HTTPS Solutions
-- [Tailscale](https://tailscale.com/) - Private VPN networking
-- [DuckDNS](https://www.duckdns.org/) - Free dynamic DNS subdomain
-- [Caddy](https://caddyserver.com/) - Automatic HTTPS with Let's Encrypt
-- [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) - Secure tunnel with DDoS protection
-- [ngrok](https://ngrok.com/) - Quick HTTPS tunnels for testing
-
-### AI Integration
-- [Claude.ai Projects](https://claude.ai) - Connect your notes to Claude
-- [GitHub Copilot](https://github.com/features/copilot) - AI coding assistant
-- [Cursor](https://cursor.sh/) - AI-powered code editor
-
----
-
-## License
+## 📜 License
 
 MIT License - Use freely for personal projects.
