@@ -230,6 +230,14 @@ Setting up WIF is complex, but it's worth it. The manual steps are:
 
 **Lesson**: Modern cloud authentication is about short-lived tokens and trust relationships, not long-lived keys.
 
+### Lesson 6: Size Matters (Attachments & Plugins)
+
+Obsidian notes are small text files, but plugins, themes, and images can be large. CouchDB has a default `max_document_size` (often 64MB or 8MB depending on version) that can block these larger items.
+
+**The Fix**: We explicitly set `max_document_size` and `max_http_request_size` to 4GB in the startup script. We also reduced `couch_httpd_auth/iterations` to 1000 to speed up the many small authentication requests LiveSync makes.
+
+**Lesson**: Default database configurations are often tuned for generic web apps, not for syncing entire application environments (like Obsidian's `.obsidian` folder).
+
 ---
 
 ## How Good Engineers Think About This

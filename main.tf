@@ -236,6 +236,25 @@ resource "google_compute_instance" "obsidian_couchdb_vm" {
     echo ">>> CORS configured successfully!"
 
     # --------------------------------------------------------------------------
+    # Configure CouchDB for Large Documents (Plugins/Themes Sync)
+    # --------------------------------------------------------------------------
+    echo ">>> Configuring CouchDB for large documents..."
+
+    # Set max_document_size to 4GB (required for syncing large plugins/themes)
+    curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/couchdb/max_document_size \
+      -d '"4294967296"' -H "Content-Type: application/json"
+
+    # Set max_http_request_size to 4GB
+    curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/chttpd/max_http_request_size \
+      -d '"4294967296"' -H "Content-Type: application/json"
+
+    # Reduce auth iterations for performance (recommended for LiveSync)
+    curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/couch_httpd_auth/iterations \
+      -d '"1000"' -H "Content-Type: application/json"
+
+    echo ">>> CouchDB optimized for LiveSync!"
+
+    # --------------------------------------------------------------------------
     # Optional: Install and Configure Tailscale
     # --------------------------------------------------------------------------
     # Tailscale provides private network access without exposing ports publicly

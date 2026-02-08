@@ -406,6 +406,16 @@ This is the most secure and flexible setup:
 
 ## 🩺 Troubleshooting
 
+### Plugins, Themes, or Configs not syncing?
+If your notes sync but plugins and themes don't, it's usually because CouchDB's default document size limit is too small.
+
+**Fix**: The `main.tf` now includes optimized settings for `max_document_size` (4GB).
+1.  **New users**: No action needed, it's configured by default.
+2.  **Existing users**:
+    *   Pull latest changes and run `terraform apply`.
+    *   Restart the VM from GCP console to re-run the startup script.
+    *   *Alternatively*, SSH into the VM and run the plugin's "Setup CouchDB" check or execute the manual `curl` commands found in the updated `main.tf`.
+
 ### Check Logs on the VM
 ```bash
 sudo cat /var/log/couchdb-setup.log
