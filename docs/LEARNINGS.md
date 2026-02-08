@@ -1,4 +1,4 @@
-# Understanding Your Obsidian CouchDB Cloud Setup
+# ☁️ Understanding Obsidian GCP Vault: Your Cloud Setup
 
 *A deep dive into how this whole thing works, why we built it this way, and what you can learn from it.*
 

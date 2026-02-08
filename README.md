@@ -1,29 +1,54 @@
-# Obsidian LiveSync CouchDB Backend on GCP Free-Tier VM
+# ☁️ Obsidian GCP Vault
 
-**Terraform + GitHub Actions CI/CD with Workload Identity Federation**
-
-Deploy a personal CouchDB instance for [Obsidian Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync) on Google Cloud's always-free tier. End-to-end encrypted, real-time vault synchronization across all your devices, with optional Git integration for LLM access (Claude.ai, Copilot, etc.).
-
-## Cost Expectation
-
-**$0/month** for light personal use within GCP free tier limits:
-- 1 e2-micro VM instance (**must be** in us-west1, us-central1, or us-east1)
-- 30 GB standard persistent disk
-- 1 GB egress to internet per month
-- GCS storage for Terraform state (~pennies)
-
-> **Note:** Exceeding free tier limits will incur charges. Monitor your usage in GCP Console.
+[![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://www.terraform.io/)
+[![GCP](https://img.shields.io/badge/Google_Cloud-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com/)
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/features/actions)
+[![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 ---
 
-## Architecture Overview
+## 🚀 Introduction
+
+**Obsidian GCP Vault** is a professional-grade, **completely free** infrastructure for your personal knowledge base. By leveraging Google Cloud's always-free tier, it deploys a private CouchDB instance that serves as a high-performance backend for [Obsidian Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync).
+
+### ✨ Why Obsidian GCP Vault?
+
+*   **💰 Zero Cost**: Optimized for the GCP free tier ($0/month).
+*   **🔒 Privacy First**: End-to-end encrypted synchronization.
+*   **🤖 AI Ready**: Turn your notes into a knowledge base for LLMs like Claude and Copilot.
+*   **⚙️ Developer First**: Fully automated deployment via GitHub Actions & Terraform.
+
+---
+
+## 📋 Table of Contents
+
+- [📐 Architecture Overview](#architecture-overview)
+- [🌎 Free Tier Regions](#free-tier-regions-important)
+- [📋 Prerequisites](#prerequisites)
+- [🛠️ Setup Instructions](#setup-instructions)
+  - [Step 1: Enable GCP APIs](#manual-step-1-enable-gcp-apis)
+  - [Step 2: Terraform State Bucket](#manual-step-2-create-gcs-bucket-for-terraform-state)
+  - [Step 3: Workload Identity Federation](#manual-step-3-set-up-workload-identity-federation)
+  - [Step 4: Tailscale Integration](#manual-step-4-optional-get-tailscale-auth-key)
+  - [Step 5: GitHub Configuration](#manual-step-5-configure-github-repository)
+  - [Step 6: CI/CD Deployment](#step-6-deploy-via-cicd)
+- [📱 Obsidian Configuration](#step-7-configure-obsidian-livesync-desktop-only---initial-setup)
+- [🔐 HTTPS & Mobile Access](#step-75-add-https-for-mobile-access-required-for-mobile)
+- [🔄 Syncing Customizations](#step-9-syncing-plugins--customizations-cheat-sheet)
+- [🛡️ Security Recommendations](#security-recommendations)
+- [🩺 Troubleshooting](#troubleshooting)
+- [🧠 Learnings & Internals](#understanding-your-setup)
+
+---
+
+## 📐 Architecture Overview
 
 ### Full System Architecture (CouchDB + Git + LLM Integration)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Your Obsidian Vault                          │
-│                                                                  │
+│                       Your Obsidian Vault                       │
+│                                                                 │
 │  Mobile (iOS/Android)              Desktop (Mac/Win/Linux)      │
 │  ┌──────────────┐                  ┌──────────────┐             │
 │  │  Obsidian    │                  │  Obsidian    │             │
@@ -38,95 +63,97 @@ Deploy a personal CouchDB instance for [Obsidian Self-hosted LiveSync](https://g
           │                                 │
           ▼                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Google Cloud Platform                         │
+│                      Google Cloud Platform                      │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │                    e2-micro VM (Free Tier)                  │ │
+│  │                  e2-micro VM (Free Tier)                   │ │
 │  │  ┌──────────────────────────────────────────────────────┐  │ │
-│  │  │              CouchDB Container :5984                  │  │ │
-│  │  │         (LiveSync Backend - Device Sync)             │  │ │
+│  │  │               CouchDB Container :5984                │  │ │
+│  │  │          (LiveSync Backend - Device Sync)            │  │ │
 │  │  └──────────────────────────────────────────────────────┘  │ │
-│  │  Optional: Tailscale (Private Network Access)              │ │
+│  │        Optional: Tailscale (Private Network Access)         │ │
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                                  │
                                  │ Git commits (desktop only)
                                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                         GitHub Repository                        │
-│              (Markdown files + Version Control)                 │
-│                                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
-│  │ Notes/   │  │ Daily/   │  │Projects/ │  │Resources/│       │
-│  │  note1.md│  │  2025-.. │  │  proj.md │  │  ref.md  │       │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘       │
+│                        GitHub Repository                        │
+│               (Markdown files + Version Control)                │
+│                                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+│  │ Notes/   │  │ Daily/   │  │Projects/ │  │Resources/│         │
+│  │  note1.md│  │  2025-.. │  │  proj.md │  │  ref.md  │         │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘         │
 └─────────────────────────────────────────────────────────────────┘
                                  │
                                  │ AI Integration
                                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                        LLM Integration Layer                     │
-│                                                                  │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐  │
-│  │ Claude.ai  │  │   Copilot  │  │   Cursor   │  │ Custom   │  │
-│  │ Projects   │  │            │  │            │  │ LLM APIs │  │
-│  └────────────┘  └────────────┘  └────────────┘  └──────────┘  │
-│                                                                  │
+│                      LLM Integration Layer                      │
+│                                                                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐   │
+│  │ Claude.ai  │  │   Copilot  │  │   Cursor   │  │ Custom   │   │
+│  │ Projects   │  │            │  │            │  │ LLM APIs │   │
+│  └────────────┘  └────────────┘  └────────────┘  └──────────┘   │
+│                                                                 │
 │  "Analyze my notes on..."                                       │
 │  "Summarize this week's journal entries"                        │
 │  "Find connections between my project notes"                    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Why This Dual-Layer Approach?
+### 🧠 Why This Dual-Layer Approach?
 
-**Layer 1: CouchDB (Real-time Device Sync)**
-- ✅ Syncs across **all devices** including mobile
-- ✅ Real-time, automatic, zero-touch
-- ✅ End-to-end encrypted
-- ✅ Designed for multi-master replication
-- ✅ Handles binary files (images, PDFs)
+| Layer | Purpose | Benefits |
+| :--- | :--- | :--- |
+| **CouchDB** | Real-time Device Sync | ✅ All devices (mobile included), Encrypted, Automatic. |
+| **Git (Optional)** | AI Knowledge Base | ✅ Long-term history, AI-accessible (Claude/Copilot). |
 
-**Layer 2: Git (AI Integration + Version Control)** - OPTIONAL
-- ✅ Makes your notes **AI-accessible** (Claude.ai, Copilot, etc.)
-- ✅ Long-term version history
-- ✅ Browse notes on GitHub web interface
-- ✅ Standard format for portability
-- ⚠️ Desktop only (Git plugin doesn't work on mobile)
+> [!TIP]
+> **CouchDB** is for active sync across all devices. **Git** is for your AI knowledge base and version control (Desktop only).
 
-**They serve different purposes:**
-- **CouchDB** = Active sync for daily use across all devices
-- **Git** = AI knowledge base + backup (optional, but highly recommended for LLM integration)
+### ⚖️ Cost Expectation
+
+**$0/month** for light personal use within GCP free tier limits:
+*   **1 e2-micro VM** instance (must be in specific regions).
+*   **30 GB** standard persistent disk.
+*   **1 GB** egress to internet per month.
+*   **GCS storage** for Terraform state (~pennies).
+
+> [!CAUTION]
+> Exceeding free tier limits will incur charges. Monitor your usage in the GCP Console.
 
 ---
 
-## Free Tier Regions (IMPORTANT!)
+## 🌎 Free Tier Regions (IMPORTANT!)
 
 GCP's **always-free tier** for e2-micro VMs is **only available** in these **3 US regions**:
 
 | Region | Location | Default in This Setup |
-|--------|----------|----------------------|
+| :--- | :--- | :---: |
 | **us-west1** | Oregon | |
 | **us-central1** | Iowa | ✅ **DEFAULT** |
 | **us-east1** | South Carolina | |
 
-**This setup defaults to `us-central1-a`** which is already free-tier compliant. You don't need to change anything unless you want a different region for lower latency.
+> [!NOTE]
+> This setup defaults to `us-central1-a`. You don't need to change anything unless you want a different region for lower latency.
 
 ---
 
-## Prerequisites
+## 📋 Prerequisites
 
 Before starting, ensure you have:
 
-- [ ] A Google Cloud Platform account
-- [ ] A GCP project with billing enabled (free tier requires a billing account, but won't charge within limits)
-- [ ] `gcloud` CLI installed and authenticated
-- [ ] Terraform 1.5+ installed (or use GitHub Actions only)
-- [ ] A GitHub account (for CI/CD)
-- [ ] (Optional) Tailscale account for private networking
+*   [ ] A **Google Cloud Platform** account.
+*   [ ] A GCP project with **billing enabled** (free tier requires it, but won't charge within limits).
+*   [ ] **gcloud CLI** installed and authenticated.
+*   [ ] **Terraform 1.5+** installed (or use GitHub Actions only).
+*   [ ] A **GitHub** account (for CI/CD).
+*   [ ] *(Optional)* **Tailscale** account for private networking.
 
 ---
 
-## Setup Instructions
+## 🛠️ Setup Instructions
 
 ### MANUAL STEP 1: Enable GCP APIs
 
@@ -532,6 +559,37 @@ git push -u origin main
 
 ---
 
+### STEP 9: Syncing Plugins & Customizations (Cheat Sheet)
+
+To sync plugins, settings, themes, and other customizations across devices using Self-hosted LiveSync:
+
+#### Prerequisites
+- Self-hosted LiveSync plugin installed and working (notes already sync via CouchDB).
+- **Unique device name** set on EVERY device BEFORE enabling Customization Sync.
+  - Location: Settings → Self-hosted LiveSync → "Device name".
+  - Examples: `adyen-mac-1`, `iphone-15`, `windows-work`.
+  - Cannot change name while Customization Sync is enabled.
+
+#### Initial Setup Sequence (Do Once)
+1. **Set unique device names** on all devices.
+2. **On MAIN device** (with desired config):
+   - Enable `Customization sync` + `Scan customization automatically` in settings.
+   - Open **Customization sync dialog** (button at bottom of plugin settings).
+   - Click **Select All Shiny** (selects community-plugins.json, appearance.json, etc.).
+   - Click **Apply All Selected** to upload to CouchDB.
+3. **On SECONDARY devices**:
+   - Open **Customization sync dialog**.
+   - Select incoming changes (**Select All Shiny**).
+   - Click **Apply** (auto-installs plugins, applies themes).
+   - **Restart Obsidian** fully.
+
+#### Ongoing Behavior
+- **Automatic**: Most changes (plugins, settings, themes) propagate in the background within seconds/minutes.
+- **Manual intervention**: Only needed for rare conflicts or if a change doesn't propagate (use "Scan changes" in the dialog).
+- **Tip**: Backup your `.obsidian` folder locally before performing the first big sync.
+
+---
+
 ## Security Recommendations
 
 ### Understanding Firewall Rules
@@ -741,7 +799,8 @@ obsidian-cloud/                    # This infrastructure repo
 ├── terraform.tfvars.example       # Example values
 ├── .gitignore                     # Excludes secrets
 ├── README.md                      # This file
-└── FOR_miguruiz.md                # Deep dive explanation
+└── docs/
+    └── LEARNINGS.md               # Deep dive explanation
 
 your-obsidian-vault/               # Separate repo for your notes
 ├── .obsidian/
@@ -790,6 +849,7 @@ Use this checklist to track your progress:
   - [ ] Add vault repo to Claude.ai Projects
 - [ ] **Step 9**: Configure Obsidian LiveSync on mobile with HTTPS URL
 - [ ] **Step 10**: Restrict firewall or enable Tailscale for additional security
+- [ ] **Step 11**: (Optional) Configure Customization Sync (Plugins/Themes/Settings)
 
 ---
 
