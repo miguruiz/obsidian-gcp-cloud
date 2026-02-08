@@ -227,11 +227,11 @@ resource "google_compute_instance" "obsidian_couchdb_vm" {
 
     # Allow methods
     curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/cors/methods \
-      -d '"GET, PUT, POST, HEAD, DELETE"' -H "Content-Type: application/json"
+      -d '"GET, PUT, POST, HEAD, DELETE, OPTIONS"' -H "Content-Type: application/json"
 
     # Allow headers
     curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/cors/headers \
-      -d '"accept, authorization, content-type, origin, referer, x-requested-with"' -H "Content-Type: application/json"
+      -d '"accept, authorization, content-type, origin, referer, x-requested-with, if-match"' -H "Content-Type: application/json"
 
     echo ">>> CORS configured successfully!"
 
