@@ -78,19 +78,41 @@ on:
 #    - WIF_SERVICE_ACCOUNT: terraform-github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com
 #
 #    Secrets (Settings → Secrets and variables → Actions → Secrets):
-#    - COUCHDB_PASSWORD: Your strong CouchDB password
+#    - COUCHDB_PASSWORD: CouchDB password (required only if ENABLE_COUCHDB=true)
 #    - TAILSCALE_AUTH_KEY: (Optional) Tailscale auth key for automatic private networking
+#    - DUCKDNS_TOKEN: DuckDNS token (required if ENABLE_HTTPS=true)
+#    - MCPVAULT_PASSWORD: MCPVault basic auth password (required if ENABLE_MCPVAULT=true)
+#
+#    Variables (Settings → Secrets and variables → Actions → Variables):
+#    - ENABLE_COUCHDB: true/false (default: false — use Obsidian Sync instead)
+#    - ENABLE_HEADLESS_OBSIDIAN: true/false (default: false)
+#    - ENABLE_MCPVAULT: true/false (default: false)
+#    - ENABLE_CLAUDE_CLI: true/false (default: false)
+#    - ENABLE_HTTPS: true/false
+#    - DUCKDNS_SUBDOMAIN: your-subdomain (without .duckdns.org)
+#    - MCPVAULT_USER: basic auth username (default: admin)
+#    - OBSIDIAN_VAULT_PATH: vault path on VM (default: /opt/obsidian-vault)
 #
 # =============================================================================
 
 env:
-  TF_VERSION: "1.7.0"
+  TF_VERSION: "1.9.0"
   TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
-  TF_VAR_couchdb_password: ${{ secrets.COUCHDB_PASSWORD }}
   TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
   TF_VAR_enable_https: ${{ vars.ENABLE_HTTPS }}
   TF_VAR_duckdns_subdomain: ${{ vars.DUCKDNS_SUBDOMAIN }}
   TF_VAR_duckdns_token: ${{ secrets.DUCKDNS_TOKEN }}
+  # CouchDB (legacy — disable when using Obsidian Sync)
+  TF_VAR_enable_couchdb: ${{ vars.ENABLE_COUCHDB || 'false' }}
+  TF_VAR_couchdb_password: ${{ secrets.COUCHDB_PASSWORD }}
+  # New service flags
+  TF_VAR_enable_headless_obsidian: ${{ vars.ENABLE_HEADLESS_OBSIDIAN || 'false' }}
+  TF_VAR_enable_mcpvault: ${{ vars.ENABLE_MCPVAULT || 'false' }}
+  TF_VAR_enable_claude_cli: ${{ vars.ENABLE_CLAUDE_CLI || 'false' }}
+  TF_VAR_enable_runner: ${{ vars.ENABLE_RUNNER || 'false' }}
+  TF_VAR_obsidian_vault_path: ${{ vars.OBSIDIAN_VAULT_PATH || '/opt/obsidian-vault' }}
+  TF_VAR_mcpvault_user: ${{ vars.MCPVAULT_USER || 'admin' }}
+  TF_VAR_mcpvault_password: ${{ secrets.MCPVAULT_PASSWORD }}
   # Optional: Override defaults via GitHub variables
   # TF_VAR_region: ${{ vars.GCP_REGION }}
   # TF_VAR_zone: ${{ vars.GCP_ZONE }}

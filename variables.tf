@@ -1,5 +1,5 @@
 # =============================================================================
-# variables.tf - Input variables for Obsidian LiveSync CouchDB deployment
+# variables.tf - Input variables for Obsidian VM deployment
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -39,6 +39,40 @@ variable "zone" {
 }
 
 # -----------------------------------------------------------------------------
+# Service Feature Flags
+# -----------------------------------------------------------------------------
+
+variable "enable_couchdb" {
+  description = "Enable CouchDB (Obsidian LiveSync). Disable if using Obsidian Sync instead."
+  type        = bool
+  default     = false
+}
+
+variable "enable_headless_obsidian" {
+  description = "Sync vault from Obsidian Sync to VM. Requires Obsidian Sync subscription."
+  type        = bool
+  default     = false
+}
+
+variable "enable_mcpvault" {
+  description = "Run MCPVault MCP server. Requires enable_https=true for Claude.ai iOS access."
+  type        = bool
+  default     = false
+}
+
+variable "enable_claude_cli" {
+  description = "Install claude CLI on VM for cron-based vault automation."
+  type        = bool
+  default     = false
+}
+
+variable "enable_runner" {
+  description = "Install the Python scheduled prompt runner daemon."
+  type        = bool
+  default     = false
+}
+
+# -----------------------------------------------------------------------------
 # CouchDB Configuration
 # -----------------------------------------------------------------------------
 
@@ -54,13 +88,42 @@ variable "couchdb_user" {
 }
 
 variable "couchdb_password" {
-  description = "Admin password for CouchDB. REQUIRED - use a strong, unique password!"
+  description = "Admin password for CouchDB. Required when enable_couchdb = true."
   type        = string
-  sensitive   = true # Prevents password from appearing in logs/output
+  sensitive   = true
+  default     = ""
 
   validation {
-    condition     = length(var.couchdb_password) >= 12
-    error_message = "CouchDB password must be at least 12 characters for security."
+    condition     = !var.enable_couchdb || length(var.couchdb_password) >= 12
+    error_message = "couchdb_password must be at least 12 characters when enable_couchdb = true."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# MCPVault Configuration
+# -----------------------------------------------------------------------------
+
+variable "obsidian_vault_path" {
+  description = "Local path for the vault on the VM (shared between obsidian-headless and MCPVault)."
+  type        = string
+  default     = "/opt/obsidian-vault"
+}
+
+variable "mcpvault_user" {
+  description = "Username for MCPVault basic auth (used by Caddy)."
+  type        = string
+  default     = "admin"
+}
+
+variable "mcpvault_password" {
+  description = "Password for MCPVault basic auth. Min 12 chars when enable_mcpvault = true."
+  type        = string
+  sensitive   = true
+  default     = ""
+
+  validation {
+    condition     = !var.enable_mcpvault || length(var.mcpvault_password) >= 12
+    error_message = "mcpvault_password must be at least 12 characters when enable_mcpvault = true."
   }
 }
 
