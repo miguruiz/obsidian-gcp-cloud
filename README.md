@@ -210,9 +210,10 @@ tailscale ip -4                       # save this IP for future SSH
 ### 2. Obsidian Sync (`ENABLE_HEADLESS_OBSIDIAN`)
 
 ```bash
-sudo -u obsidian ob login                              # opens browser — authenticate with your Obsidian account
+sudo -u obsidian ob login                              # authenticate with your Obsidian account
 sudo -u obsidian ob sync-list-remote                   # list your vaults, copy the exact name
-sudo -u obsidian ob sync-setup --vault "Your Vault"    # connect vault to this VM path
+cd /opt/obsidian-vault                                 # IMPORTANT: must run setup from vault directory
+sudo -u obsidian ob sync-setup --vault "My Vault"      # configure sync at this path
 sudo systemctl start obsidian-sync                     # begin continuous sync
 journalctl -u obsidian-sync -f                         # watch files appear in /opt/obsidian-vault/
 ```
