@@ -316,7 +316,7 @@ CLAUDE_JSON
     if [ "$ENABLE_RUNNER" = "true" ]; then
       echo ">>> Installing Obsidian Runner..."
       apt-get install -y python3-pip
-      pip3 install pyyaml croniter python-frontmatter
+      pip3 install --break-system-packages pyyaml croniter python-frontmatter
 
       mkdir -p /opt/obsidian-runner
 
