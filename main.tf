@@ -208,10 +208,19 @@ resource "google_compute_instance" "obsidian_couchdb_vm" {
         curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/cors/credentials \
           -d '"true"' -H "Content-Type: application/json"
         curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/cors/methods \
-          -d '"GET, PUT, POST, HEAD, DELETE"' -H "Content-Type: application/json"
+          -d '"GET, PUT, POST, HEAD, DELETE, OPTIONS"' -H "Content-Type: application/json"
         curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/cors/headers \
-          -d '"accept, authorization, content-type, origin, referer, x-requested-with"' -H "Content-Type: application/json"
+          -d '"accept, authorization, content-type, origin, referer, x-requested-with, if-match"' -H "Content-Type: application/json"
         echo ">>> CORS configured"
+
+        echo ">>> Configuring CouchDB for large documents..."
+        curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/couchdb/max_document_size \
+          -d '"4294967296"' -H "Content-Type: application/json"
+        curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/chttpd/max_http_request_size \
+          -d '"4294967296"' -H "Content-Type: application/json"
+        curl -X PUT http://'${var.couchdb_user}':'${var.couchdb_password}'@localhost:5984/_node/_local/_config/couch_httpd_auth/iterations \
+          -d '"1000"' -H "Content-Type: application/json"
+        echo ">>> CouchDB optimized for LiveSync!"
       fi
     fi
 
