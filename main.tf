@@ -298,6 +298,7 @@ After=network.target
 
 [Service]
 Type=simple
+User=miguruiz
 ExecStart=/usr/bin/ob sync --continuous
 WorkingDirectory=$VAULT_PATH
 Restart=on-failure
