@@ -58,6 +58,23 @@ output "ssh_command" {
 # Quick Setup Reminders
 # -----------------------------------------------------------------------------
 
+output "mcpvault_url" {
+  description = "MCPVault SSE endpoint URL for Claude.ai integration"
+  value       = var.enable_mcpvault && var.enable_https && var.duckdns_subdomain != "" ? "https://${var.duckdns_subdomain}.duckdns.org/sse" : "Enable enable_mcpvault + enable_https to get HTTPS URL"
+}
+
+output "obsidian_headless_next_steps" {
+  description = "Manual steps required to activate Obsidian Sync on the VM"
+  value = var.enable_headless_obsidian ? join("\n", [
+    "SSH: gcloud compute ssh obsidian-couchdb-vm --zone=${var.zone}",
+    "Then: ob login",
+    "Then: ob sync-list-remote",
+    "Then: ob sync-setup --vault 'Your Vault Name'",
+    "Then: systemctl start obsidian-sync",
+    "Check: journalctl -u obsidian-sync -f"
+  ]) : "Headless Obsidian not enabled (enable_headless_obsidian = false)"
+}
+
 output "next_steps" {
   description = "Next steps after deployment"
   value       = <<-EOT
@@ -68,23 +85,29 @@ output "next_steps" {
 
     1. Wait 2-3 minutes for the startup script to complete
 
-    2. Verify CouchDB is running:
+    %{if var.enable_couchdb}2. Verify CouchDB is running:
        curl -u ${var.couchdb_user}:YOUR_PASSWORD ${google_compute_instance.obsidian_couchdb_vm.network_interface[0].access_config[0].nat_ip}:5984
 
     3. Configure Obsidian LiveSync:
        - Server URL: http://${google_compute_instance.obsidian_couchdb_vm.network_interface[0].access_config[0].nat_ip}:5984
        - Username: ${var.couchdb_user}
-       - Password: (the password you configured)
        - Database: obsidian (or your preferred name)
 
-    4. SECURITY - Restrict firewall access:
-       - Update allowed_ips in terraform.tfvars to your IP only
-       - Run: terraform apply
+    %{endif}%{if var.enable_headless_obsidian}Obsidian Headless - Manual steps required:
+       1. SSH: gcloud compute ssh obsidian-couchdb-vm --zone=${var.zone}
+       2. ob login
+       3. ob sync-list-remote
+       4. ob sync-setup --vault 'Your Vault Name'
+       5. systemctl start obsidian-sync
+       6. journalctl -u obsidian-sync -f
 
-    5. RECOMMENDED - Install Tailscale for private access:
-       ${google_compute_instance.obsidian_couchdb_vm.name}$ curl -fsSL https://tailscale.com/install.sh | sh
-       ${google_compute_instance.obsidian_couchdb_vm.name}$ sudo tailscale up
+    %{endif}%{if var.enable_claude_cli}Claude CLI - Manual step required:
+       SSH to VM then run: claude login
 
-    ============================================================
+    %{endif}%{if var.enable_mcpvault && var.enable_https}MCPVault HTTPS endpoint:
+       https://${var.duckdns_subdomain}.duckdns.org/sse
+       Add to Claude.ai: Integrations -> Add MCP server
+
+    %{endif}============================================================
   EOT
 }

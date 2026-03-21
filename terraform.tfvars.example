@@ -21,61 +21,73 @@ project_id = "your-gcp-project-id"
 # zone   = "us-central1-a"
 
 # -----------------------------------------------------------------------------
-# CouchDB Credentials (REQUIRED)
+# Service Feature Flags
 # -----------------------------------------------------------------------------
-couchdb_user     = "admin"
-couchdb_password = "CHANGE_ME_use_a_strong_password_here_min_12_chars"
+# Toggle each service independently. All default to false (no services run
+# unless explicitly enabled). Mix and match as needed.
+#
+# Typical setup (Obsidian Sync + MCPVault for Claude.ai):
+#   enable_couchdb           = false  # Using Obsidian Sync instead
+#   enable_headless_obsidian = true   # Sync vault to VM from Obsidian cloud
+#   enable_mcpvault          = true   # Expose vault to Claude.ai via MCP
+#   enable_claude_cli        = true   # Install claude CLI for cron automation
+#   enable_https             = true   # Required for Claude.ai iOS MCP access
+#
+# Legacy setup (self-hosted CouchDB):
+#   enable_couchdb           = true
+#   enable_headless_obsidian = false
+#   enable_mcpvault          = false
+
+enable_couchdb           = false
+enable_headless_obsidian = false
+enable_mcpvault          = false
+enable_claude_cli        = false
 
 # -----------------------------------------------------------------------------
-# Network Security (Port 5984 - Direct CouchDB Access)
+# CouchDB Credentials (only required when enable_couchdb = true)
 # -----------------------------------------------------------------------------
-# Default: [] (closed) - Recommended when using HTTPS or Tailscale
-#
-# With HTTPS: All traffic goes through port 443 (Caddy), no need for port 5984
-# With Tailscale: Access via private VPN, no public ports needed
-#
-# Leave as [] (closed) for security:
-# allowed_ips = []
-#
-# Only open if you need direct HTTP access (not recommended):
-# allowed_ips = ["YOUR.IP.ADDRESS/32"]  # Specific IP only
-# allowed_ips = ["0.0.0.0/0"]           # Public (INSECURE!)
+# couchdb_user     = "admin"
+# couchdb_password = "CHANGE_ME_use_a_strong_password_here_min_12_chars"
 
-allowed_ips = []  # Secure default - use HTTPS or Tailscale
+# -----------------------------------------------------------------------------
+# MCPVault Configuration (only required when enable_mcpvault = true)
+# -----------------------------------------------------------------------------
+# Basic auth credentials that Caddy puts in front of MCPVault.
+# Claude.ai connects with: https://user:password@your-subdomain.duckdns.org/sse
+#
+# obsidian_vault_path = "/opt/obsidian-vault"  # Where vault files live on VM
+# mcpvault_user       = "admin"
+# mcpvault_password   = "CHANGE_ME_use_a_strong_password_here_min_12_chars"
 
-# SSH access (leave empty to disable SSH firewall rule - recommended)
-# ssh_allowed_ips = ["YOUR.IP.ADDRESS/32"]
+# -----------------------------------------------------------------------------
+# Network Security
+# -----------------------------------------------------------------------------
+# allowed_ips controls direct port 5984 access (CouchDB only).
+# With HTTPS enabled, all traffic goes through port 443 — leave this closed.
+allowed_ips     = []
 ssh_allowed_ips = []
 
 # -----------------------------------------------------------------------------
-# Optional: Tailscale Configuration
+# Optional: Tailscale (private SSH access without opening port 22)
 # -----------------------------------------------------------------------------
 # Get an auth key from: https://login.tailscale.com/admin/settings/keys
-# - Create a new auth key
-# - Mark as "Reusable" so the VM can reconnect after restarts
-# - Set expiration (or make it non-expiring for personal use)
-#
-# If provided, Tailscale will be installed automatically, giving you private
-# access to CouchDB without exposing it to the public internet!
-#
 # tailscale_auth_key = "tskey-auth-xxxxxxxxxxxxxxxxxxxxx"
 
 # -----------------------------------------------------------------------------
-# Optional: DuckDNS + Caddy Configuration (HTTPS for Mobile)
+# HTTPS: DuckDNS + Caddy (required for Claude.ai iOS MCP access)
 # -----------------------------------------------------------------------------
-# Enable HTTPS with automatic Let's Encrypt certificates via Caddy.
-# Required for Obsidian LiveSync on mobile devices!
+# Claude.ai iOS works by having Anthropic's servers connect to YOUR endpoint.
+# Tailscale alone won't work — you need a public HTTPS URL.
+# DuckDNS gives you a free subdomain; Caddy handles Let's Encrypt certs.
 #
 # Setup:
-# 1. Go to https://www.duckdns.org/
-# 2. Sign in with Google/GitHub
-# 3. Create a subdomain (e.g., "obsidian-yourname")
-# 4. Copy your DuckDNS token
-# 5. Set the values below
+# 1. Go to https://www.duckdns.org/ and create a subdomain
+# 2. Copy your DuckDNS token
+# 3. Set the values below and set enable_https = true
 #
-# enable_https = true
-# duckdns_subdomain = "obsidian-yourname"  # WITHOUT .duckdns.org
-# duckdns_token = "your-duckdns-token-here"
+# enable_https      = true
+# duckdns_subdomain = "obsidian-yourname"   # WITHOUT .duckdns.org
+# duckdns_token     = "your-duckdns-token-here"
 
 # -----------------------------------------------------------------------------
 # For CI/CD Reference (not used directly by Terraform)
