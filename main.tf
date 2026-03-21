@@ -270,7 +270,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/ob sync --continuous
+ExecStart=/usr/bin/ob sync --continuous
 WorkingDirectory=$VAULT_PATH
 Restart=on-failure
 RestartSec=30
