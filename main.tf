@@ -288,8 +288,11 @@ resource "google_compute_instance" "obsidian_couchdb_vm" {
     if [ "$ENABLE_HEADLESS_OBSIDIAN" = "true" ]; then
       echo ">>> Installing obsidian-headless..."
       npm install -g obsidian-headless
+
+      # Create dedicated user for obsidian sync
+      useradd --system --create-home --shell /bin/bash obsidian 2>/dev/null || true
       mkdir -p "$VAULT_PATH"
-      chmod 755 "$VAULT_PATH"
+      chown obsidian:obsidian "$VAULT_PATH"
 
       cat > /etc/systemd/system/obsidian-sync.service <<OBSIDIAN_UNIT
 [Unit]
@@ -298,7 +301,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=miguruiz
+User=obsidian
 ExecStart=/usr/bin/ob sync --continuous
 WorkingDirectory=$VAULT_PATH
 Restart=on-failure
