@@ -10,8 +10,23 @@
 # Firewall Rules
 # -----------------------------------------------------------------------------
 
+# Allow SSH from GCP IAP only (35.235.240.0/20) — enables gcloud compute ssh --tunnel-through-iap
+resource "google_compute_firewall" "allow_ssh_iap" {
+  name     = "allow-ssh-iap"
+  network  = "default"
+  project  = var.project_id
+  priority = 999
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = ["35.235.240.0/20"]
+}
+
 # Deny public SSH and RDP — overrides GCP's default allow rules (priority 65534)
-# if they are ever recreated. SSH access is via Tailscale only.
+# if they are ever recreated. SSH via IAP or Tailscale only.
 resource "google_compute_firewall" "deny_ssh_public" {
   name     = "deny-ssh-public"
   network  = "default"
