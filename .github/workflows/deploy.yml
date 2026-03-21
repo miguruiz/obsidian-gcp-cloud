@@ -317,32 +317,24 @@ jobs:
           echo "| Output | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| VM External IP | $(terraform output -raw vm_external_ip) |" >> $GITHUB_STEP_SUMMARY
-          echo "| CouchDB HTTP URL | $(terraform output -raw couchdb_url) |" >> $GITHUB_STEP_SUMMARY
+          echo "| SSH | $(terraform output -raw ssh_command) |" >> $GITHUB_STEP_SUMMARY
 
-          # Show HTTPS URL if enabled
-          HTTPS_URL=$(terraform output -raw couchdb_https_url)
-          if [ "$HTTPS_URL" != "HTTPS not enabled" ]; then
-            echo "| **CouchDB HTTPS URL** | **$HTTPS_URL** |" >> $GITHUB_STEP_SUMMARY
-            echo "| Admin UI (HTTPS) | ${HTTPS_URL}/_utils |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Admin UI (HTTP) | $(terraform output -raw couchdb_admin_ui) |" >> $GITHUB_STEP_SUMMARY
+          MCPVAULT_URL=$(terraform output -raw mcpvault_url)
+          if [ "$MCPVAULT_URL" != "Enable enable_mcpvault + enable_https to get HTTPS URL" ]; then
+            echo "| **MCPVault SSE** | **$MCPVAULT_URL** |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          COUCHDB_URL=$(terraform output -raw couchdb_url)
+          if [ "$COUCHDB_URL" != "CouchDB not enabled" ]; then
+            echo "| CouchDB | $COUCHDB_URL |" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Show appropriate security warnings
-          if [ "$HTTPS_URL" != "HTTPS not enabled" ]; then
-            echo "✅ **HTTPS enabled!** Use the HTTPS URL in Obsidian (works on mobile)." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "📱 **Mobile Setup:** Use $HTTPS_URL" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ **HTTPS not enabled** - Mobile Obsidian will NOT work!" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "To enable HTTPS:" >> $GITHUB_STEP_SUMMARY
-            echo "1. Set \`ENABLE_HTTPS\` = \`true\` in GitHub Variables" >> $GITHUB_STEP_SUMMARY
-            echo "2. Set \`DUCKDNS_SUBDOMAIN\` and \`DUCKDNS_TOKEN\`" >> $GITHUB_STEP_SUMMARY
-            echo "3. Redeploy" >> $GITHUB_STEP_SUMMARY
+          HEADLESS=$(terraform output -raw obsidian_headless_next_steps)
+          if [ "$HEADLESS" != "Headless Obsidian not enabled (enable_headless_obsidian = false)" ]; then
+            echo "### 🖐️ Manual steps required" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$HEADLESS" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
           fi
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⚠️ **Security:** Remember to restrict firewall rules if using HTTP directly!" >> $GITHUB_STEP_SUMMARY

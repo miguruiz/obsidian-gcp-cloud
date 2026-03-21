@@ -31,18 +31,13 @@ output "vm_internal_ip" {
 # -----------------------------------------------------------------------------
 
 output "couchdb_url" {
-  description = "CouchDB HTTP URL for Obsidian LiveSync configuration"
-  value       = "http://${google_compute_instance.obsidian_couchdb_vm.network_interface[0].access_config[0].nat_ip}:5984"
+  description = "CouchDB HTTP URL (only relevant when enable_couchdb = true)"
+  value       = var.enable_couchdb ? "http://${google_compute_instance.obsidian_couchdb_vm.network_interface[0].access_config[0].nat_ip}:5984" : "CouchDB not enabled"
 }
 
 output "couchdb_admin_ui" {
-  description = "CouchDB Fauxton admin UI URL"
-  value       = "http://${google_compute_instance.obsidian_couchdb_vm.network_interface[0].access_config[0].nat_ip}:5984/_utils"
-}
-
-output "couchdb_https_url" {
-  description = "CouchDB HTTPS URL (if HTTPS is enabled)"
-  value       = var.enable_https && var.duckdns_subdomain != "" ? "https://${var.duckdns_subdomain}.duckdns.org" : "HTTPS not enabled"
+  description = "CouchDB Fauxton admin UI URL (only relevant when enable_couchdb = true)"
+  value       = var.enable_couchdb ? "http://${google_compute_instance.obsidian_couchdb_vm.network_interface[0].access_config[0].nat_ip}:5984/_utils" : "CouchDB not enabled"
 }
 
 # -----------------------------------------------------------------------------
