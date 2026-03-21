@@ -1,0 +1,14 @@
+jobs:
+  - id: morning-routine
+    schedule: "0 8 * * *"
+    prompts:
+      - "Prompts/morning/journal.md"
+      - "Prompts/morning/tasks.md"
+      - "Prompts/morning/focus.md"
+    enabled: true
+
+  - id: daily-review
+    schedule: "30 8 * * *"
+    prompts:
+      - "Prompts/review.md"
+    enabled: true

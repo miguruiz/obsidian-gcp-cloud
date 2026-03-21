@@ -1,0 +1,16 @@
+[Unit]
+Description=Obsidian Scheduled Prompt Runner
+After=network.target obsidian-sync.service
+Wants=obsidian-sync.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/obsidian-runner/obsidian_runner.py
+Environment=VAULT_BASE=/opt/obsidian-vault
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
