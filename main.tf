@@ -172,6 +172,19 @@ resource "google_compute_instance" "obsidian_couchdb_vm" {
     apt-get install -y ca-certificates curl gnupg lsb-release
 
     # --------------------------------------------------------------------------
+    # Tailscale (first — ensures SSH access even if later steps fail)
+    # --------------------------------------------------------------------------
+    if [ -n "$TAILSCALE_AUTH_KEY" ]; then
+      echo ">>> Installing Tailscale..."
+      curl -fsSL https://tailscale.com/install.sh | sh
+      tailscale up --authkey="$TAILSCALE_AUTH_KEY" --accept-routes
+      TAILSCALE_IP=$(tailscale ip -4)
+      echo ">>> Tailscale connected! Private IP: $TAILSCALE_IP"
+    else
+      echo ">>> Tailscale not configured (skipping)"
+    fi
+
+    # --------------------------------------------------------------------------
     # Node.js 22 (needed for headless obsidian, mcpvault, or claude CLI)
     # --------------------------------------------------------------------------
     if [ "$ENABLE_HEADLESS_OBSIDIAN" = "true" ] || [ "$ENABLE_MCPVAULT" = "true" ] || [ "$ENABLE_CLAUDE_CLI" = "true" ]; then
@@ -535,19 +548,6 @@ RUNNER_UNIT
       echo ">>> Obsidian Runner started"
       echo ">>> Place schedules.yaml at: $VAULT_PATH/00-Inbox/_other/schedules.yaml"
       echo ">>> Execution log will appear at: $VAULT_PATH/00-Inbox/_other/schedules-log.md"
-    fi
-
-    # --------------------------------------------------------------------------
-    # Tailscale (private SSH access — unchanged)
-    # --------------------------------------------------------------------------
-    if [ -n "$TAILSCALE_AUTH_KEY" ]; then
-      echo ">>> Installing Tailscale..."
-      curl -fsSL https://tailscale.com/install.sh | sh
-      tailscale up --authkey="$TAILSCALE_AUTH_KEY" --accept-routes
-      TAILSCALE_IP=$(tailscale ip -4)
-      echo ">>> Tailscale connected! Private IP: $TAILSCALE_IP"
-    else
-      echo ">>> Tailscale not configured (skipping)"
     fi
 
     # --------------------------------------------------------------------------
