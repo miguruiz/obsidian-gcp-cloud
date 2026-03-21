@@ -1,52 +1,61 @@
-# Obsidian Cloud VM
+# ☁️ Obsidian Cloud VM
+
+[![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://www.terraform.io/)
+[![GCP](https://img.shields.io/badge/Google_Cloud-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com/)
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/features/actions)
+[![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **Terraform + GitHub Actions CI/CD on a GCP free-tier e2-micro VM.**
 
 Modular personal infrastructure for syncing an Obsidian vault to a server, exposing it as an MCP tool for Claude.ai, and running scheduled LLM automations. Each service is independently toggled via feature flags.
 
-**Cost: ~$0/month** within GCP free tier (e2-micro in us-west1, us-central1, or us-east1).
+> [!NOTE]
+> **Cost: ~$0/month** within GCP free tier (e2-micro in us-west1, us-central1, or us-east1 only).
 
 ---
 
-## Table of Contents
+## 📋 Table of Contents
 
-- [Services](#services)
-- [Architecture](#architecture)
-- [Setup](#setup)
+- [🧩 Services](#-services)
+- [📐 Architecture](#-architecture)
+- [🛠️ Setup](#️-setup)
   - [1. Enable GCP APIs](#1-enable-gcp-apis)
-  - [2. Terraform state bucket](#2-create-gcs-bucket-for-terraform-state)
+  - [2. Terraform State Bucket](#2-create-gcs-bucket-for-terraform-state)
   - [3. Workload Identity Federation](#3-set-up-workload-identity-federation)
-  - [4. GitHub variables & secrets](#4-configure-github-repository)
+  - [4. GitHub Variables & Secrets](#4-configure-github-repository)
   - [5. Deploy](#5-deploy)
-- [Manual Steps After Deployment](#manual-steps-after-deployment)
+- [🖐️ Manual Steps After Deployment](#️-manual-steps-after-deployment)
   - [Obsidian Sync](#obsidian-sync-setup-enable_headless_obsidian)
   - [Claude CLI](#claude-cli-auth-enable_claude_cli)
   - [obsidian_runner](#obsidian_runner-setup-enable_runner)
   - [Connect MCPVault to Claude.ai](#connect-mcpvault-to-claudeai)
-- [Prompt File Format](#prompt-file-format)
-- [Verification](#verification)
-- [File Structure](#file-structure)
-- [Troubleshooting](#troubleshooting)
+- [📄 Prompt File Format](#-prompt-file-format)
+- [✅ Verification](#-verification)
+- [🏗️ File Structure](#️-file-structure)
+- [🩺 Troubleshooting](#-troubleshooting)
 
 ---
 
-## Services
+## 🧩 Services
 
-Each service is independently controlled by a GitHub Actions variable (feature flag). All default to `false`.
+Each service is independently controlled by a GitHub Actions variable (feature flag). All default to `false` — enable only what you need.
 
 | Service | Flag | What it does | Dependencies |
 |---------|------|--------------|--------------|
-| **obsidian-headless** | `ENABLE_HEADLESS_OBSIDIAN` | Continuously pulls vault from Obsidian Sync cloud to `/opt/obsidian-vault/` on the VM | Obsidian Sync subscription; manual `ob login` after deploy |
-| **MCPVault** | `ENABLE_MCPVAULT` | Runs an MCP server over your vault so Claude.ai can read/search your notes | `ENABLE_HEADLESS_OBSIDIAN` + `ENABLE_HTTPS` for Claude.ai iOS |
+| **obsidian-headless** | `ENABLE_HEADLESS_OBSIDIAN` | Continuously pulls vault from Obsidian Sync to `/opt/obsidian-vault/` on the VM | Obsidian Sync subscription; manual `ob login` after deploy |
+| **MCPVault** | `ENABLE_MCPVAULT` | Runs an MCP server over your vault so Claude.ai can read and search your notes | `ENABLE_HEADLESS_OBSIDIAN` + `ENABLE_HTTPS` for Claude.ai iOS |
 | **Claude CLI** | `ENABLE_CLAUDE_CLI` | Installs `claude` on the VM for cron-based vault automation | Manual `claude login` after deploy |
-| **obsidian_runner** | `ENABLE_RUNNER` | Python daemon: reads `schedules.yaml` from vault, fires LLM prompt jobs on cron, writes results back as markdown | `ENABLE_HEADLESS_OBSIDIAN` (vault must exist); manual schedule file setup |
-| **HTTPS (Caddy)** | `ENABLE_HTTPS` | Public HTTPS via DuckDNS + Caddy with Let's Encrypt. Required for Claude.ai iOS to reach MCPVault | `DUCKDNS_SUBDOMAIN` + `DUCKDNS_TOKEN` |
+| **obsidian_runner** | `ENABLE_RUNNER` | Python daemon: reads `schedules.yaml` from vault, fires LLM prompts on cron, writes results back as markdown | `ENABLE_HEADLESS_OBSIDIAN`; manual schedule file setup |
+| **HTTPS (Caddy)** | `ENABLE_HTTPS` | Public HTTPS via DuckDNS + Caddy + Let's Encrypt. Required for Claude.ai iOS | `DUCKDNS_SUBDOMAIN` + `DUCKDNS_TOKEN` |
 | **Tailscale** | `TAILSCALE_AUTH_KEY` (secret) | Private VPN for SSH access without opening port 22 | Tailscale account |
 | **CouchDB** | `ENABLE_COUCHDB` | Legacy: self-hosted CouchDB for Obsidian LiveSync plugin | `COUCHDB_PASSWORD` secret |
 
+> [!TIP]
+> **Recommended setup:** `ENABLE_HEADLESS_OBSIDIAN` + `ENABLE_MCPVAULT` + `ENABLE_HTTPS` + `ENABLE_RUNNER` + `TAILSCALE_AUTH_KEY`. This gives you Claude.ai vault access, scheduled automation, and private SSH.
+
 ---
 
-## Architecture
+## 📐 Architecture
 
 ```
 Obsidian Sync (cloud)
@@ -56,18 +65,18 @@ Obsidian Sync (cloud)
        │
        ├── MCPVault (stdio → supergateway → :3000 SSE)
        │       └── Caddy (:443, HTTPS + basicauth, Let's Encrypt)
-       │               └── Claude.ai iOS/Web
+       │               └── Claude.ai iOS / Web
        │                   (Anthropic's servers connect to your public URL)
        │
-       └── obsidian_runner (Python daemon, every 30s)
-               reads  00-Inbox/_other/schedules.yaml   ← edit in Obsidian
+       └── obsidian_runner (Python daemon, wakes every 30s)
+               reads  00-Inbox/_other/schedules.yaml   ← edit from any device
                writes 00-Inbox/_other/schedules-log.md ← visible in Obsidian
-               runs prompt files → writes LLM output back to vault
+               runs prompt .md files → writes LLM output back to vault
 ```
 
 ---
 
-## Setup
+## 🛠️ Setup
 
 ### 1. Enable GCP APIs
 
@@ -78,7 +87,7 @@ gcloud services enable compute.googleapis.com iam.googleapis.com \
   sts.googleapis.com --project=$PROJECT_ID
 ```
 
-### 2. Create GCS bucket for Terraform state
+### 2. Create GCS Bucket for Terraform State
 
 ```bash
 export BUCKET_NAME="obsidian-tfstate-$(openssl rand -hex 4)"
@@ -86,11 +95,12 @@ gsutil mb -p $PROJECT_ID -l us-central1 -b on gs://$BUCKET_NAME
 gsutil versioning set on gs://$BUCKET_NAME
 ```
 
-Update `backend.tf` with your bucket name.
+> [!IMPORTANT]
+> Update `backend.tf` with your bucket name after creating it.
 
-### 3. Set up Workload Identity Federation
+### 3. Set Up Workload Identity Federation
 
-Allows GitHub Actions to authenticate to GCP without long-lived keys.
+Allows GitHub Actions to authenticate to GCP **without storing any long-lived keys**.
 
 ```bash
 # Pool + provider
@@ -125,14 +135,14 @@ gcloud iam service-accounts add-iam-policy-binding \
   --role="roles/iam.workloadIdentityUser" \
   --member="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool/attribute.repository/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME"
 
-# Save this — you'll need it for WIF_PROVIDER
+# Save this output — needed for WIF_PROVIDER GitHub variable
 gcloud iam workload-identity-pools providers describe github-provider \
   --project=$PROJECT_ID --location="global" \
   --workload-identity-pool="github-actions-pool" \
   --format="value(name)"
 ```
 
-### 4. Configure GitHub repository
+### 4. Configure GitHub Repository
 
 **Variables** (Settings → Secrets and variables → Actions → Variables):
 
@@ -164,11 +174,11 @@ gcloud iam workload-identity-pools providers describe github-provider \
 git push origin master
 ```
 
-Watch the Actions workflow. Wait 3–5 min for the startup script to complete.
+Watch the Actions workflow. Wait 3–5 minutes for the startup script to complete.
 
 ---
 
-## Manual Steps After Deployment
+## 🖐️ Manual Steps After Deployment
 
 SSH to the VM first:
 ```bash
@@ -180,7 +190,7 @@ gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a
 
 ```bash
 ob login                              # opens browser — authenticate with your Obsidian account
-ob sync-list-remote                   # list your vaults — copy the exact name
+ob sync-list-remote                   # list your vaults, copy the exact name
 ob sync-setup --vault "Your Vault"    # connect vault to this VM path
 systemctl start obsidian-sync         # begin continuous sync
 journalctl -u obsidian-sync -f        # watch files appear in /opt/obsidian-vault/
@@ -194,8 +204,6 @@ claude login    # follow the OAuth flow
 
 ### obsidian_runner setup (`ENABLE_RUNNER`)
 
-The daemon reads its schedule from inside the vault. After obsidian-sync is running:
-
 ```bash
 systemctl status obsidian-runner      # verify it started
 journalctl -u obsidian-runner -f      # watch live logs
@@ -205,19 +213,20 @@ Place your schedule file at `$VAULT_BASE/00-Inbox/_other/schedules.yaml` — cop
 
 Execution results appear at `00-Inbox/_other/schedules-log.md`, visible in Obsidian.
 
-> **Note:** `call_llm()` in `runner/obsidian_runner.py` is currently a placeholder. Wire it to the Anthropic SDK to make prompts actually run.
+> [!NOTE]
+> `call_llm()` in `runner/obsidian_runner.py` is currently a placeholder. Wire it to the Anthropic SDK to make prompts actually run.
 
 ### Connect MCPVault to Claude.ai
 
-1. Claude.ai → Settings → Integrations → Add MCP server
+1. Claude.ai → Settings → Integrations → **Add MCP server**
 2. URL: `https://your-subdomain.duckdns.org/sse`
 3. Credentials: your `MCPVAULT_USER` / `MCPVAULT_PASSWORD`
 
 ---
 
-## Prompt File Format
+## 📄 Prompt File Format
 
-Each prompt is a markdown file with YAML frontmatter. The body is the prompt text.
+Each prompt is a markdown file with YAML frontmatter. The body is the prompt text sent to the LLM.
 
 ```markdown
 ---
@@ -235,25 +244,25 @@ Place these anywhere in your vault and reference their paths in `schedules.yaml`
 
 ---
 
-## Verification
+## ✅ Verification
 
 ```bash
 # Startup script logs
 cat /var/log/obsidian-vm-setup.log
 
-# All service statuses
+# All service statuses at a glance
 systemctl status obsidian-sync mcpvault obsidian-runner caddy
 
 # Vault is populated
 ls /opt/obsidian-vault/
 
-# Runner log (also visible in Obsidian)
+# Runner execution log (also visible in Obsidian)
 cat /opt/obsidian-vault/00-Inbox/_other/schedules-log.md
 ```
 
 ---
 
-## File Structure
+## 🏗️ File Structure
 
 ```
 obsidian-cloud/
@@ -274,7 +283,7 @@ obsidian-cloud/
 
 ---
 
-## Troubleshooting
+## 🩺 Troubleshooting
 
 | Issue | Check |
 |-------|-------|
@@ -286,7 +295,7 @@ obsidian-cloud/
 
 ---
 
-## Resources
+## 📚 Resources
 
 - [MCPVault](https://github.com/bitbonsai/mcpvault)
 - [obsidian-headless](https://www.npmjs.com/package/obsidian-headless)
