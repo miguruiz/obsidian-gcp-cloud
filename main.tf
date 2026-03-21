@@ -10,6 +10,36 @@
 # Firewall Rules
 # -----------------------------------------------------------------------------
 
+# Deny public SSH and RDP — overrides GCP's default allow rules (priority 65534)
+# if they are ever recreated. SSH access is via Tailscale only.
+resource "google_compute_firewall" "deny_ssh_public" {
+  name     = "deny-ssh-public"
+  network  = "default"
+  project  = var.project_id
+  priority = 1000
+
+  deny {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+}
+
+resource "google_compute_firewall" "deny_rdp_public" {
+  name     = "deny-rdp-public"
+  network  = "default"
+  project  = var.project_id
+  priority = 1000
+
+  deny {
+    protocol = "tcp"
+    ports    = ["3389"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+}
+
 # CouchDB access firewall rule
 # Only created if allowed_ips is not empty. Use HTTPS or Tailscale for secure access.
 resource "google_compute_firewall" "allow_couchdb" {
