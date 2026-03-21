@@ -1,4 +1,4 @@
-# Understanding Your Obsidian CouchDB Cloud Setup
+# Understanding Your Obsidian Cloud Setup
 
 *A deep dive into how this whole thing works, why we built it this way, and what you can learn from it.*
 
@@ -6,333 +6,333 @@
 
 ## The Big Picture: What Are We Even Doing Here?
 
-Imagine you have notes in Obsidian on your laptop. You also have Obsidian on your phone, your work computer, and maybe a tablet. You want all of them to have the same notes, updated in real-time, without trusting a third-party cloud service with your private thoughts.
+Imagine you have notes in Obsidian on your laptop. You also have Obsidian on your phone. You want Claude.ai to be able to read and reason over those notes — and you want cron jobs on a server to run AI prompts against them automatically.
 
-**The solution**: Run your own database server (CouchDB) in the cloud, and let Obsidian's LiveSync plugin handle the synchronization. CouchDB is perfect for this because it was literally designed for multi-master replication—the exact thing you need when multiple devices might edit the same note.
+**The v2 stack** (current):
+- **Obsidian Sync** (paid) handles device-to-device sync — Obsidian's own cloud, end-to-end encrypted, fast
+- **obsidian-headless** runs on the VM and continuously pulls the vault down from Obsidian's cloud into `/opt/obsidian-vault/` on disk
+- **MCPVault** reads those files and exposes them as an MCP server
+- **Caddy** puts it behind public HTTPS so Claude.ai iOS can reach it (Anthropic's servers need to connect to your endpoint)
+- **Claude CLI** runs on the VM so cron jobs can fire AI prompts directly against the vault
+- **obsidian_runner** (new) — a Python daemon that reads `schedules.yaml` from your vault, runs LLM prompt files on cron schedules, and writes results back into the vault as markdown
 
-**But wait, cloud servers cost money!** Not if you're clever. Google Cloud has an "always-free tier" that includes one tiny VM per month. We're going to use that.
+**The v1 stack** (legacy, now optional):
+- Self-hosted CouchDB in a Docker container, synced to Obsidian via the LiveSync plugin
 
-**And managing servers is annoying!** That's why we use Terraform (infrastructure-as-code) and GitHub Actions (automated deployments). Write the config once, push to git, and everything deploys automatically.
-
----
-
-## The Architecture: A Map of the Territory
-
-```
-Your Devices                     GitHub                              Google Cloud
-============                     ======                              ============
-
-┌──────────┐                  ┌─────────────┐                    ┌──────────────────┐
-│ Laptop   │                  │             │   (1) Push code    │   GCP Project    │
-│ Obsidian │                  │  Your Repo  │─────────────────▶ │                  │
-└────┬─────┘                  │  (main.tf)  │                    │  ┌────────────┐  │
-     │                        │             │                    │  │ e2-micro   │  │
-     │                        └──────┬──────┘                    │  │    VM      │  │
-     │                               │                           │  │            │  │
-     │    ┌──────────────────────────┘                          │  │ ┌────────┐ │  │
-     │    │    (2) GitHub Actions                                │  │ │CouchDB │ │  │
-     │    │        triggers                                      │  │ │:5984   │ │  │
-     │    ▼                                                      │  │ └────────┘ │  │
-     │  ┌─────────────────────┐                                  │  └────────────┘  │
-     │  │ Workload Identity   │   (3) "Hey GCP, I'm              │         ▲        │
-     │  │ Federation (OIDC)   │────── GitHub, let me in"         │         │        │
-     │  └─────────────────────┘                                  │         │        │
-     │                                                           │         │        │
-     │                          (4) Terraform creates/updates    │         │        │
-     │                              the VM and firewall          │         │        │
-     │                                                           └─────────┼────────┘
-     │                                                                     │
-     └─────────────────────────────────────────────────────────────────────┘
-                        (5) Obsidian syncs notes via CouchDB
-```
+You can still run v1 — it's controlled by a feature flag. But the default is now v2.
 
 ---
 
-## Technical Deep Dive: The Files and What They Do
+## Architecture: The Full Picture
 
-### The Terraform Files: Infrastructure as Code
+```
+Obsidian Cloud (Obsidian Sync)
+        │
+        │ continuous sync (obsidian-headless)
+        ▼
+/opt/obsidian-vault/   ←──────────────────────────────────┐
+        │                                                  │
+        │ reads files                           cron jobs  │
+        ▼                                          │       │
+MCPVault (stdio)                        claude CLI ─┘       │
+        │                                                  │
+        │ supergateway wraps to :3000 (SSE)                │
+        ▼                                                  │
+Caddy (:443, public HTTPS)                                 │
+  basicauth in front                                       │
+        │                                                  │
+        ▼                                                  │
+Claude.ai iOS / Web / Desktop ─────────────────────────────┘
+(Anthropic's servers connect to your VM's public HTTPS URL)
+```
 
-Think of Terraform files as a **blueprint for your cloud infrastructure**. Instead of clicking around in GCP's web console (which is tedious and error-prone), you write what you want in code.
+All of this lives on a **free-tier GCP e2-micro VM**. Terraform manages the infrastructure. GitHub Actions deploys on every push.
 
-#### `main.tf` - The Heart of It All
+---
 
-This file contains the actual resources we're creating:
+## Why We Switched from CouchDB to Obsidian Sync
 
-**1. Firewall Rules**
+CouchDB was a self-hosted database we ran in Docker to sync Obsidian vaults between devices. It worked, but:
+
+1. **Complexity**: Docker on a tiny VM, CORS configuration, health checks, managing a database
+2. **Reliability**: CouchDB occasionally needed restarts, manual intervention
+3. **The real goal shifted**: We don't need device sync from the server anymore — Obsidian Sync handles that natively. We needed the vault *on the server* for AI access, not as a sync hub.
+
+Obsidian Sync + headless is simpler: Obsidian's cloud is the source of truth, the VM is just a read-only consumer.
+
+CouchDB is still available via `enable_couchdb = true` — maybe you want it for other reasons. The feature flag system means both can coexist.
+
+---
+
+## The Feature Flag System
+
+This is one of the most useful patterns in this codebase. Instead of having separate Terraform files for different configurations, every service is a boolean variable:
+
 ```hcl
-resource "google_compute_firewall" "allow_couchdb" {
-  name    = "allow-couchdb-5984"
-  ...
-  allow {
-    protocol = "tcp"
-    ports    = ["5984"]
-  }
-  source_ranges = var.allowed_ips  # WHO can connect
-  target_tags   = ["couchdb-server"]  # WHICH VMs this applies to
+variable "enable_mcpvault" {
+  type    = bool
+  default = false
 }
 ```
 
-Think of this as telling GCP: "Create a firewall rule that lets certain IP addresses connect to port 5984 on any VM tagged as 'couchdb-server'."
+In the startup script, each service is wrapped in a shell conditional:
 
-**2. The VM Instance**
-```hcl
-resource "google_compute_instance" "obsidian_couchdb_vm" {
-  name         = "obsidian-couchdb-vm"
-  machine_type = "e2-micro"  # The free tier size
-  zone         = var.zone
+```bash
+ENABLE_MCPVAULT='${var.enable_mcpvault}'   # Terraform injects true/false at apply time
 
-  boot_disk {
-    initialize_params {
-      image = "debian-cloud/debian-12"
-      size  = 30  # GB, max for free tier
+if [ "$ENABLE_MCPVAULT" = "true" ]; then
+  npm install -g @bitbonsai/mcpvault supergateway
+  # ... install systemd unit, start service
+fi
+```
+
+This means:
+- **One codebase** handles all configurations
+- **GitHub variables** control what's actually running (no code changes needed to toggle services)
+- **Nothing installs unless needed**: if `enable_couchdb = false`, Docker is never installed. The VM is lighter.
+- **Easy to reason about**: `terraform plan` shows exactly what changes
+
+The variables flow: GitHub Variables/Secrets → `TF_VAR_*` environment variables → Terraform `var.*` → shell variables in startup script → conditional `if` blocks.
+
+---
+
+## The MCP + Claude.ai iOS Problem (and Solution)
+
+This tripped us up conceptually early on. Here's the mental model:
+
+**MCP (Model Context Protocol)** is how Claude reads external tools/data. There are two transport modes:
+1. **stdio**: Claude spawns a subprocess locally, talks to it via stdin/stdout. Used for local tools (like when you're running Claude Desktop on your laptop).
+2. **SSE (Server-Sent Events)**: Claude connects to an HTTP endpoint. Required for remote servers.
+
+**The Claude.ai iOS problem**: When you add an MCP server in Claude.ai on your iPhone, it's not YOUR phone connecting to your server. It's **Anthropic's servers** connecting to your server on behalf of your session. This means:
+- Tailscale won't work (Anthropic can't join your VPN)
+- Localhost won't work
+- You need a **public HTTPS URL** that anyone on the internet can reach
+
+**The solution**:
+- MCPVault runs locally on the VM (stdio mode internally)
+- `supergateway` wraps it and exposes port 3000 as an SSE endpoint
+- Caddy sits in front with basicauth + Let's Encrypt HTTPS
+- Result: `https://your-subdomain.duckdns.org/sse` — a public, authenticated, HTTPS MCP endpoint
+
+The Claude CLI on the VM (for cron jobs) uses MCPVault in the OTHER mode — stdio directly. The `~/.claude.json` config tells it to spawn `npx @bitbonsai/mcpvault /opt/obsidian-vault` as a local subprocess. No network involved. Fast, simple.
+
+---
+
+## Security Model
+
+**MCPVault has no built-in auth**. Anyone who can reach port 3000 can read your vault. That's why:
+1. Port 3000 is NOT in the GCP firewall rules — only ports 443 (and optionally 22 via SSH rule) are open
+2. Caddy's `basicauth` gates everything at the HTTPS layer
+3. Passwords are hashed with bcrypt by Caddy's built-in `caddy hash-password` command
+
+**Tailscale** is still there for SSH access. It's a private VPN — even if you have no firewall rules for port 22, you can SSH to the VM via its Tailscale IP. This is the recommended way to access the VM for the manual setup steps.
+
+**Defense in depth**:
+- GCP firewall: only port 443 open to the world
+- Caddy basicauth: password-protects the MCP endpoint
+- Obsidian vault: your notes stay encrypted in transit, readable only on the VM disk
+- Tailscale: private SSH without exposing port 22
+
+---
+
+## The Startup Script Deep Dive
+
+The startup script runs once when the VM first boots (or when the VM is recreated). Terraform injects variables using `${'${var.name}'}` syntax — these are Terraform template interpolations that get resolved at `terraform apply` time, before the script ever touches the VM.
+
+```bash
+ENABLE_MCPVAULT='${var.enable_mcpvault}'   # becomes: ENABLE_MCPVAULT='true'
+```
+
+The tricky part: **nested heredocs in a Terraform heredoc**. Terraform uses `<<-SCRIPT ... SCRIPT` to define the startup script. Inside that, we write systemd unit files using bash heredocs like `<<MCPVAULT_UNIT ... MCPVAULT_UNIT`. The inner terminator must be at column 0, must use a different name than `SCRIPT`, and variables in the inner heredoc expand at bash runtime (when the script runs on the VM), which is exactly what we want for baking in paths like `$VAULT_PATH`.
+
+**Key pattern**: Variables set at Terraform time (like the feature flags, passwords, domain names) are injected as string literals. Variables derived at runtime (like `$EXTERNAL_IP` from the GCP metadata API, `$MCPVAULT_HASH` from `caddy hash-password`) are computed when the script runs on the VM.
+
+---
+
+## The Caddy Config Gets Interesting
+
+Caddy's config varies based on which services are enabled. Three cases:
+
+**MCPVault only** (most common):
+```
+your-domain.duckdns.org {
+    basicauth /* { ... }
+    reverse_proxy localhost:3000
+}
+```
+
+**MCPVault + CouchDB** (both enabled):
+```
+your-domain.duckdns.org {
+    basicauth /mcp/* { ... }
+    handle /mcp/* {
+        uri strip_prefix /mcp
+        reverse_proxy localhost:3000
     }
-  }
-
-  metadata_startup_script = <<-SCRIPT
-    # This runs when the VM first boots!
-    apt-get update
-    # Install Docker...
-    # Run CouchDB container...
-  SCRIPT
+    handle {
+        reverse_proxy localhost:5984
+    }
 }
 ```
 
-This is where we define the actual virtual machine. The `metadata_startup_script` is **crucial**—it's a bash script that runs automatically when the VM starts up.
-
-#### Why a Startup Script Instead of a Dockerfile?
-
-Great question! Here's the mental model:
-
-- **Dockerfile**: A recipe for building a container image. Used when you're creating reusable container images.
-- **Startup Script**: Commands that run when a VM boots. Used when you need to set up a VM from scratch.
-
-We're using a **plain Debian VM**, not a container-optimized image. When GCP creates this VM, it's just a fresh Debian installation—no Docker, no nothing. The startup script:
-
-1. Installs Docker
-2. Pulls the CouchDB container image
-3. Runs the container with our configuration
-
-**Alternative approach**: GCP has "Container-Optimized OS" (COS) where you can declare a container in metadata and it runs automatically. But COS is limited—you can't easily install additional tools like Tailscale. The startup script approach is more flexible.
-
-#### `variables.tf` - The Configuration Knobs
-
-```hcl
-variable "couchdb_password" {
-  description = "Admin password for CouchDB"
-  type        = string
-  sensitive   = true  # This magic word hides it from logs!
+**CouchDB only** (legacy mode):
+```
+your-domain.duckdns.org {
+    reverse_proxy localhost:5984
 }
 ```
 
-Variables are like function parameters for your infrastructure. They let you customize the deployment without changing the core logic.
+The logic lives in the startup script — shell `if/else` blocks that write different Caddyfile content. Caddy is then started after the config is written.
 
-The `sensitive = true` flag is important—it tells Terraform to **never show this value in logs or output**. Security matters!
+---
 
-#### `outputs.tf` - The Results
+## Obsidian Headless: The "Enable But Don't Start" Pattern
 
-```hcl
-output "couchdb_url" {
-  value = "http://${google_compute_instance.obsidian_couchdb_vm.network_interface[0].access_config[0].nat_ip}:5984"
-}
-```
+`obsidian-sync.service` is installed by the startup script but **not started**. This is intentional.
 
-After Terraform runs, outputs tell you the important information—like what IP address your VM got. That gnarly line is just navigating Terraform's data structure to find the VM's external IP.
+The headless Obsidian tool needs you to authenticate with your Obsidian account first (`ob login`). That's an interactive step — it gives you a URL to visit and authenticate. You can't automate it in a startup script.
 
-#### `provider.tf` - The Connection to GCP
+So the pattern is:
+1. Startup script installs the tool, creates the systemd unit, runs `systemctl enable` (so it'll start automatically on reboot after setup)
+2. You SSH to the VM, run `ob login`, `ob sync-setup --vault "Name"`, then `systemctl start obsidian-sync`
+3. The vault starts syncing continuously. After a reboot, the service starts automatically.
 
-```hcl
-provider "google" {
-  project = var.project_id
-  region  = var.region
-}
-```
-
-This tells Terraform "we're working with Google Cloud, and here's which project to use." The actual authentication happens via environment variables or `gcloud auth`.
-
-#### `backend.tf` - Where Terraform Stores Its Memory
-
-Terraform keeps track of what it created in a "state file." By default, this is local (`terraform.tfstate`), but that's problematic for CI/CD—GitHub Actions wouldn't have access to it.
-
-The solution: Store state in a GCS bucket. The state file contains sensitive information (like your VM's IP), so keeping it in cloud storage is both practical and secure.
-
-### GitHub Actions: The Automation Engine
-
-#### `.github/workflows/deploy.yml` - The CI/CD Pipeline
-
-This is where the magic of "push to deploy" happens:
-
-```yaml
-on:
-  push:
-    branches: [main]
-```
-
-"When someone pushes to main, do these things..."
-
-**The Workload Identity Federation Part** (this is cool):
-
-Traditional approach: Store a GCP service account key in GitHub Secrets. Problem: Long-lived credentials that could be stolen.
-
-WIF approach: GitHub Actions gets a short-lived OIDC token. It presents this to GCP saying "I'm GitHub Actions running in repo X." GCP verifies the token and grants temporary access.
-
-```yaml
-- uses: google-github-actions/auth@v2
-  with:
-    workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-    service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
-```
-
-**No keys stored anywhere!** This is a best practice that many developers don't know about.
+Same pattern for `claude login` — Claude CLI is installed, but you need to authenticate interactively. The startup script logs a reminder.
 
 ---
 
 ## Lessons and Gotchas
 
-### Lesson 1: The Free Tier is a Trap (Sort Of)
+### The MCP Transport Mode Confusion
 
-GCP's free tier is real and generous, but it has gotchas:
+We initially thought Tailscale would work for Claude.ai iOS. It doesn't. The distinction between "who's connecting" (your device vs. Anthropic's servers) is easy to miss. When in doubt: **if you need AI-as-a-service to connect to your server, it must be public HTTPS**.
 
-- **Only specific regions**: us-west1, us-central1, us-east1
-- **Only one e2-micro**: If you run two, the second costs money
-- **Egress charges**: Free tier includes 1GB/month to internet. Heavy syncing could exceed this.
+### Terraform 1.9 Cross-Variable Validation
 
-**Lesson**: Always set up billing alerts. Even "free" tiers can surprise you.
+Terraform 1.7 didn't support referencing other variables inside `validation` blocks. In 1.9, this was added. We upgraded from 1.7 to 1.9 specifically to enable cleaner validation logic like:
 
-### Lesson 2: Security by Default is Broken
-
-The default `allowed_ips = ["0.0.0.0/0"]` means **anyone on the internet can try to connect**. We did this for initial testing, but it's dangerous to leave.
-
-**Lesson**: Always restrict firewall rules to specific IPs after initial setup. Better yet, use Tailscale and have no open ports at all.
-
-### Lesson 3: Startup Scripts Are "Eventually Consistent"
-
-When Terraform says "VM created successfully," the startup script might still be running. CouchDB won't be ready for 2-3 minutes after deployment.
-
-**Lesson**: Build in waiting/polling logic if you need to programmatically verify the deployment worked.
-
-### Lesson 4: State Files Are Sensitive
-
-The Terraform state file contains everything—including your secrets if you're not careful. That's why:
-- We mark `couchdb_password` as `sensitive`
-- We store state in GCS (not git)
-- The `.gitignore` excludes `.tfvars` files
-
-**Lesson**: Treat Terraform state like a database backup—sensitive and important.
-
-### Lesson 5: The Workload Identity Dance
-
-Setting up WIF is complex, but it's worth it. The manual steps are:
-
-1. Create a "pool" (a container for identity providers)
-2. Create a "provider" (tells GCP to trust GitHub's tokens)
-3. Create a service account (the identity Terraform will use)
-4. Connect them (allow the provider to impersonate the service account)
-
-**Lesson**: Modern cloud authentication is about short-lived tokens and trust relationships, not long-lived keys.
-
----
-
-## How Good Engineers Think About This
-
-### Principle 1: Separate Concerns
-
-Notice how the files are organized:
-- `main.tf` - The resources themselves
-- `variables.tf` - The inputs
-- `outputs.tf` - The results
-- `provider.tf` - The connection configuration
-
-This isn't required (you could put everything in one file), but it makes the code easier to navigate and maintain.
-
-### Principle 2: Make the Implicit Explicit
-
-The README has a checklist of manual steps. Why? Because some things genuinely can't be automated (like creating a billing-enabled GCP project), and pretending otherwise just confuses users.
-
-### Principle 3: Defense in Depth
-
-Security layers:
-1. Firewall rules (network level)
-2. CouchDB authentication (application level)
-3. Sensitive variable marking (infrastructure level)
-4. Tailscale option (network isolation)
-
-No single layer is perfect, so we stack them.
-
-### Principle 4: Make Rollback Possible
-
-Terraform tracks state, so you can always see what exists and destroy it if needed:
-```bash
-terraform destroy  # Deletes everything
+```hcl
+validation {
+  condition     = !var.enable_mcpvault || length(var.mcpvault_password) >= 12
+  error_message = "mcpvault_password must be at least 12 characters when enable_mcpvault = true."
+}
 ```
 
-### Principle 5: Log Everything
+This is much better than the alternative (no validation, or duplicating logic in scripts).
 
-The startup script redirects output to `/var/log/couchdb-setup.log`. When something goes wrong (and it will), logs are your friend.
+### Caddy's `basicauth` Requires Bcrypt Hashes
 
----
+You can't put a plaintext password in a Caddyfile. Caddy requires bcrypt-hashed passwords. The startup script uses `caddy hash-password --plaintext "$MCPVAULT_PASSWORD"` to generate the hash at deploy time, then bakes it into the Caddyfile. This means the plaintext password never touches the Caddyfile — only the hash.
 
-## The Tailscale Addition (Why It's Great)
+### supergateway Wraps stdio → SSE
 
-Tailscale deserves special mention because it fundamentally changes the security model:
+`supergateway` is the glue between MCPVault (which speaks MCP over stdio) and the HTTP world (SSE). You give it a command to run as a subprocess (`npx @bitbonsai/mcpvault /vault/path`), and it wraps that subprocess behind an HTTP SSE endpoint on a port you specify. This is a general pattern for taking any stdio MCP server and making it available over the network.
 
-**Without Tailscale**:
-- Your CouchDB is on the public internet
-- Protected only by password + firewall rules
-- Anyone who guesses the password or exploits a bug can access it
+### The VM Name Dilemma
 
-**With Tailscale**:
-- CouchDB has NO public exposure
-- Only devices on your Tailscale network can even see it
-- The VM has a private IP (100.x.x.x) that only you can access
+We kept the VM named `obsidian-couchdb-vm` even after removing CouchDB as the default. Why? Because Terraform treats a name change as "destroy old VM, create new VM" — which would destroy your disk and cause downtime. For a personal VM that's annoying. Rename it only if you're okay with recreation (e.g., you have no persistent state to preserve).
 
-It's like the difference between putting a lock on your front door vs. building your house inside a gated community.
+### Startup Scripts Run Once
 
-**Installing Tailscale** (from the VM):
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-# Authenticate via the URL it shows
-```
-
-Then update your Obsidian LiveSync to use the Tailscale IP instead of the public IP.
+GCP startup scripts run on every boot, not just the first one. This means your startup script needs to be **idempotent** — running it twice shouldn't break anything. Patterns we use:
+- `docker stop ... 2>/dev/null || true` (ignore errors if container doesn't exist)
+- `systemctl enable` is idempotent by nature
+- `npm install -g` overwrites existing installations
 
 ---
 
-## What Could Go Wrong (And How to Fix It)
+## Manual Steps After Deployment
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| "Connection refused" | Startup script still running | Wait 3 minutes |
-| "401 Unauthorized" | Wrong password | Check COUCHDB_PASSWORD secret |
-| "Network unreachable" | Wrong firewall rules | Check allowed_ips |
-| GitHub Actions fails auth | WIF misconfigured | Re-check provider and SA settings |
-| High GCP bill | Exceeded free tier | Check region, check if you have other resources |
+The startup script handles everything it can automate. These steps require you:
+
+1. **SSH to VM**: `gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a`
+2. **Authenticate Obsidian Sync**: `ob login` → visit the URL → log in with your Obsidian account
+3. **Find your vault**: `ob sync-list-remote` → copy the vault name exactly
+4. **Connect vault to VM**: `ob sync-setup --vault "Your Vault Name"`
+5. **Start syncing**: `systemctl start obsidian-sync`
+6. **Watch it work**: `journalctl -u obsidian-sync -f` → files should appear in `/opt/obsidian-vault/`
+7. **Authenticate Claude**: `claude login` → follow the OAuth flow
+8. **Test MCPVault cron**: `claude --dangerously-skip-permissions -p "list my 5 most recent notes"`
+9. **Add to Claude.ai**: Settings → Integrations → Add MCP server → `https://your-subdomain.duckdns.org/sse`
+
+---
+
+## GitHub Secrets/Variables to Configure
+
+| Name | Type | Value |
+|------|------|-------|
+| `ENABLE_HEADLESS_OBSIDIAN` | Variable | `true` |
+| `ENABLE_MCPVAULT` | Variable | `true` |
+| `ENABLE_CLAUDE_CLI` | Variable | `true` |
+| `ENABLE_COUCHDB` | Variable | `false` |
+| `ENABLE_RUNNER` | Variable | `true` |
+| `ENABLE_HTTPS` | Variable | `true` |
+| `DUCKDNS_SUBDOMAIN` | Variable | `your-subdomain` |
+| `MCPVAULT_USER` | Variable | `admin` |
+| `MCPVAULT_PASSWORD` | Secret | 12+ char strong password |
+| `DUCKDNS_TOKEN` | Secret | from duckdns.org |
+| `TAILSCALE_AUTH_KEY` | Secret | from tailscale.com/admin |
 
 ---
 
 ## What You've Learned
 
-By working through this project, you've touched:
+By working through this project (v1 and v2), you've touched:
 
-1. **Terraform** - Infrastructure as code, resource dependencies, state management
-2. **GCP** - VMs, firewall rules, IAM, Workload Identity Federation
-3. **Docker** - Running containers on VMs
-4. **GitHub Actions** - CI/CD, OIDC authentication, environment secrets
-5. **CouchDB** - A database designed for sync (even if we're just using it as a black box)
-6. **Security thinking** - Defense in depth, principle of least privilege, credential management
-
-Not bad for a "simple" sync server!
-
----
-
-## Next Steps If You Want to Go Deeper
-
-1. **Add HTTPS**: Use Caddy or nginx with Let's Encrypt
-2. **Add monitoring**: GCP Cloud Monitoring with uptime checks
-3. **Add backups**: Scheduled disk snapshots
-4. **Multi-region**: Replicate CouchDB to another region for redundancy
-5. **Cost optimization**: Use preemptible VMs (but they can be shut down anytime)
+1. **Terraform** — Infrastructure as code, feature flag variables, cross-variable validation (v1.9+), state management
+2. **GCP** — VMs, firewall rules, IAM, Workload Identity Federation, startup scripts
+3. **MCP (Model Context Protocol)** — stdio vs SSE transports, how Claude.ai iOS connects to remote servers
+4. **supergateway** — Wrapping stdio MCP servers as SSE HTTP endpoints
+5. **Caddy** — Automatic HTTPS, reverse proxying, basicauth with bcrypt, path-based routing
+6. **systemd** — Writing service units, enable vs start, journalctl
+7. **GitHub Actions** — CI/CD, OIDC authentication, environment secrets/variables
+8. **Security thinking** — Defense in depth, why Tailscale isn't enough for Claude.ai iOS, bcrypt for passwords
+9. **Python daemon patterns** — Hot-reloading config, cron scheduling with `croniter`, writing markdown logs, systemd service management
+10. **python-frontmatter** — Reading YAML frontmatter from markdown files, a clean pattern for "prompt files with metadata"
 
 ---
 
-*Remember: The best infrastructure is the one you understand. Take time to read the code, experiment, break things, and learn.*
+## The obsidian_runner: A Vault-Native Scheduler
+
+The runner is a Python daemon (`obsidian_runner.py`) that wakes up every 30 seconds, re-reads `schedules.yaml` from your vault, and fires LLM jobs according to cron schedules. Results are written back as markdown files in the vault — so everything is visible and editable in Obsidian itself.
+
+**Why this design is clever:**
+
+The schedule configuration lives at `$VAULT_BASE/00-Inbox/_other/schedules.yaml` — *inside the vault*. This means you can edit your job schedule from any device (phone, laptop, tablet) via Obsidian, and the daemon picks up the changes within 30 seconds. No SSH, no config file editing, no redeployment. The vault is both the config store and the output store.
+
+**Each prompt is a markdown file with frontmatter:**
+
+```markdown
+---
+output:
+  path: "Daily/journal-output.md"
+mode: append
+model: claude-sonnet-4-6
+temperature: 0.7
+---
+
+Review my recent journal entries and suggest one reflection question for today.
+```
+
+The frontmatter is metadata (where to write, what model, what mode). The body is the prompt. `python-frontmatter` parses these cleanly. `append` mode prepends a `---\n*YYYY-MM-DD HH:MM*\n\n` separator so multiple runs accumulate as readable sections.
+
+**The `call_llm()` function is currently a placeholder** — it logs a message and returns a dummy string. To make it real, replace it with an Anthropic API call using the `anthropic` Python SDK. The frontmatter `model` and `temperature` fields are already wired up.
+
+**Hot-reload**: `load_schedule()` re-reads the YAML on every loop iteration. If the file is missing, it returns `[]` gracefully — no crash, no noise. Add or disable jobs in Obsidian, and the daemon adapts.
+
+**Execution log**: `schedules-log.md` in the vault is appended after each job run with a block like:
+```markdown
+## 2026-03-21 08:00 -- morning-routine OK
+- `Prompts/morning/journal.md` OK
+- `Prompts/morning/tasks.md` OK
+- `Prompts/morning/focus.md` FAIL (file not found)
+```
+
+Also visible in Obsidian. No need to SSH to check what ran.
+
+**Single-quoted heredoc trick**: The Python script is embedded in the startup script using `<<'RUNNER_SCRIPT'` (note the single quotes). This tells bash to NOT expand any `$variables` inside the heredoc. Without the single quotes, `$VAULT_BASE` in the Python source would get replaced by the shell variable (which doesn't exist in that context), breaking the script. The systemd unit uses `<<RUNNER_UNIT` (no quotes) specifically because we DO want `$VAULT_PATH` to expand there.
+
+---
+
+*The best infrastructure is the one you understand — and can turn off in a single variable change.*
