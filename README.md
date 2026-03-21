@@ -180,33 +180,54 @@ Watch the Actions workflow. Wait 3–5 minutes for the startup script to complet
 
 ## 🖐️ Manual Steps After Deployment
 
-SSH to the VM first:
+These are **one-time steps per VM**. Credentials persist across reboots — only redo if the VM is destroyed and recreated.
+
+### 0. SSH to the VM
+
 ```bash
 gcloud compute ssh obsidian-couchdb-vm --zone=us-central1-a
-# or via Tailscale: ssh root@<tailscale-ip>
+# or via Tailscale once connected: ssh miguruiz@<tailscale-ip>
 ```
 
-### Obsidian Sync setup (`ENABLE_HEADLESS_OBSIDIAN`)
+### 0.1 Check the startup script completed successfully
+
+```bash
+cat /var/log/obsidian-vm-setup.log
+```
+
+Look for `=== Setup Completed` at the end. If it's missing, something failed — check the last lines to see where it stopped.
+
+### 1. Tailscale (`TAILSCALE_AUTH_KEY`)
+
+```bash
+tailscale status                      # check if already connected
+# if not found, install manually:
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up --authkey="tskey-auth-xxxx" --accept-routes
+tailscale ip -4                       # save this IP for future SSH
+```
+
+### 2. Obsidian Sync (`ENABLE_HEADLESS_OBSIDIAN`)
 
 ```bash
 ob login                              # opens browser — authenticate with your Obsidian account
 ob sync-list-remote                   # list your vaults, copy the exact name
 ob sync-setup --vault "Your Vault"    # connect vault to this VM path
-systemctl start obsidian-sync         # begin continuous sync
+sudo systemctl start obsidian-sync    # begin continuous sync
 journalctl -u obsidian-sync -f        # watch files appear in /opt/obsidian-vault/
 ```
 
-### Claude CLI auth (`ENABLE_CLAUDE_CLI`)
+### 3. Claude CLI (`ENABLE_CLAUDE_CLI`)
 
 ```bash
 claude login    # follow the OAuth flow
 ```
 
-### obsidian_runner setup (`ENABLE_RUNNER`)
+### 4. obsidian_runner (`ENABLE_RUNNER`)
 
 ```bash
-systemctl status obsidian-runner      # verify it started
-journalctl -u obsidian-runner -f      # watch live logs
+sudo systemctl status obsidian-runner   # verify it started automatically
+journalctl -u obsidian-runner -f        # watch live logs
 ```
 
 Place your schedule file at `$VAULT_BASE/00-Inbox/_other/schedules.yaml` — copy `runner/schedules.yaml` from this repo as a starting point. The daemon hot-reloads it every 30 seconds, so you can edit it from any device in Obsidian.
@@ -216,7 +237,7 @@ Execution results appear at `00-Inbox/_other/schedules-log.md`, visible in Obsid
 > [!NOTE]
 > `call_llm()` in `runner/obsidian_runner.py` is currently a placeholder. Wire it to the Anthropic SDK to make prompts actually run.
 
-### Connect MCPVault to Claude.ai
+### 5. Connect MCPVault to Claude.ai
 
 1. Claude.ai → Settings → Integrations → **Add MCP server**
 2. URL: `https://your-subdomain.duckdns.org/sse`
