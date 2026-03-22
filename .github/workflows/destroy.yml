@@ -23,7 +23,6 @@ on:
 env:
   TF_VERSION: "1.9.0"
   TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
-  TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
   TF_VAR_enable_https: ${{ vars.ENABLE_HTTPS || 'false' }}
   TF_VAR_zone: ${{ vars.GCP_ZONE || 'us-central1-a' }}
 

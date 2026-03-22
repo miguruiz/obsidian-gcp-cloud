@@ -36,14 +36,6 @@ export VAULT_PATH ENABLE_OBSIDIAN_SYNC ENABLE_MCPVAULT ENABLE_CLAUDE_CLI \
        ENABLE_RUNNER ENABLE_HTTPS ENABLE_COUCHDB
 
 # --------------------------------------------------------------------------
-# Tailscale DNS — disable MagicDNS to prevent it from breaking system DNS
-# --------------------------------------------------------------------------
-if command -v tailscale &>/dev/null && tailscale status &>/dev/null 2>&1; then
-  echo ">>> Disabling Tailscale MagicDNS to protect system DNS..."
-  tailscale set --accept-dns=false 2>/dev/null || true
-fi
-
-# --------------------------------------------------------------------------
 # Node.js — shared prerequisite for obsidian-sync, mcpvault, claude-cli
 # --------------------------------------------------------------------------
 NODE_MAJOR="22"

@@ -129,19 +129,6 @@ resource "google_compute_instance" "obsidian_vm" {
     chown obsidian:obsidian /opt/obsidian-vault
     chmod 755 /opt/obsidian-vault /opt/obsidian-runner
 
-    # --------------------------------------------------------------------------
-    # Tailscale (early — ensures SSH access even if later steps fail)
-    # --------------------------------------------------------------------------
-    TAILSCALE_AUTH_KEY='${var.tailscale_auth_key}'
-    if [ -n "$TAILSCALE_AUTH_KEY" ]; then
-      echo ">>> Installing Tailscale..."
-      curl -fsSL https://tailscale.com/install.sh | sh
-      tailscale up --authkey="$TAILSCALE_AUTH_KEY" --accept-routes --accept-dns=false
-      echo ">>> Tailscale connected: $(tailscale ip -4)"
-    else
-      echo ">>> Tailscale not configured (skipping)"
-    fi
-
     echo "=== Bootstrap Completed at $(date) ==="
     echo ">>> Services will be deployed by CI/CD via services/deploy.sh"
   SCRIPT

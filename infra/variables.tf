@@ -53,21 +53,6 @@ variable "enable_https" {
 }
 
 # -----------------------------------------------------------------------------
-# Tailscale (bootstrap — needs to run on first boot before CI/CD can SSH in)
-# -----------------------------------------------------------------------------
-
-variable "tailscale_auth_key" {
-  description = <<-EOT
-    Tailscale authentication key for automatic network joining on first boot.
-    Get from: https://login.tailscale.com/admin/settings/keys
-    Leave empty to skip Tailscale installation.
-  EOT
-  type      = string
-  default   = ""
-  sensitive = true
-}
-
-# -----------------------------------------------------------------------------
 # Optional: Terraform State Backend (for reference)
 # -----------------------------------------------------------------------------
 
