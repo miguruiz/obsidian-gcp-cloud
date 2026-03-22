@@ -13,8 +13,12 @@
 
 set -euo pipefail
 
-echo "  [obsidian-sync] Installing obsidian-headless..."
-npm install -g obsidian-headless
+if command -v ob &>/dev/null; then
+  echo "  [obsidian-sync] obsidian-headless already installed ($(ob --version 2>/dev/null || echo 'unknown version')), skipping"
+else
+  echo "  [obsidian-sync] Installing obsidian-headless (large download, may take a few minutes)..."
+  npm install -g obsidian-headless
+fi
 
 echo "  [obsidian-sync] Ensuring obsidian user and vault directory exist..."
 useradd --system --create-home --shell /bin/bash obsidian 2>/dev/null || true

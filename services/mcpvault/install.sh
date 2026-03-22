@@ -11,8 +11,12 @@
 
 set -euo pipefail
 
-echo "  [mcpvault] Installing @bitbonsai/mcpvault and supergateway..."
-npm install -g @bitbonsai/mcpvault supergateway
+if command -v supergateway &>/dev/null && npx --yes @bitbonsai/mcpvault --version &>/dev/null 2>&1; then
+  echo "  [mcpvault] @bitbonsai/mcpvault and supergateway already installed, skipping"
+else
+  echo "  [mcpvault] Installing @bitbonsai/mcpvault and supergateway..."
+  npm install -g @bitbonsai/mcpvault supergateway
+fi
 
 echo "  [mcpvault] Ensuring vault directory exists..."
 mkdir -p "$VAULT_PATH"

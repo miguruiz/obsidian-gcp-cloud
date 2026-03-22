@@ -11,8 +11,12 @@
 
 set -euo pipefail
 
-echo "  [claude-cli] Installing @anthropic-ai/claude-code..."
-npm install -g @anthropic-ai/claude-code
+if command -v claude &>/dev/null; then
+  echo "  [claude-cli] claude already installed ($(claude --version 2>/dev/null || echo 'unknown version')), skipping"
+else
+  echo "  [claude-cli] Installing @anthropic-ai/claude-code..."
+  npm install -g @anthropic-ai/claude-code
+fi
 
 echo "  [claude-cli] Writing Claude config with MCPVault as local stdio server..."
 mkdir -p /root
