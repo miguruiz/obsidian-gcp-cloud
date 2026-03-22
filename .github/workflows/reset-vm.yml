@@ -1,0 +1,35 @@
+name: "Reset VM"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  reset:
+    name: "Reset obsidian-vm"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Reset VM
+        run: |
+          gcloud compute instances reset obsidian-vm \
+            --zone=${{ vars.GCP_ZONE || 'us-central1-a' }} \
+            --project=${{ vars.GCP_PROJECT_ID }}
+          echo "VM reset triggered. Waiting 30s for boot..."
+          sleep 30
+          gcloud compute instances describe obsidian-vm \
+            --zone=${{ vars.GCP_ZONE || 'us-central1-a' }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --format="value(status)"
