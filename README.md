@@ -45,11 +45,10 @@ Each service lives in its own folder under `services/` and is independently cont
 | **Claude CLI** | `ENABLE_CLAUDE_CLI` | Installs `claude` on the VM for cron-based vault automation | Manual `claude login` after deploy |
 | **obsidian-runner** | `ENABLE_RUNNER` | Python daemon: reads `schedules.yaml` from vault, fires LLM prompts on cron, writes results back as markdown | `ENABLE_OBSIDIAN_SYNC`; manual schedule file setup |
 | **Caddy (HTTPS)** | `ENABLE_HTTPS` | Public HTTPS via DuckDNS + Caddy + Let's Encrypt. Required for Claude.ai iOS | `DUCKDNS_SUBDOMAIN` + `DUCKDNS_TOKEN` |
-| **Tailscale** | `TAILSCALE_AUTH_KEY` (secret) | Private VPN for SSH access without opening port 22 | Tailscale account |
 | **CouchDB** | `ENABLE_COUCHDB` | Legacy: self-hosted CouchDB for Obsidian LiveSync plugin (disabled — using Obsidian Sync) | `COUCHDB_PASSWORD` secret |
 
 > [!TIP]
-> **Recommended setup:** `ENABLE_OBSIDIAN_SYNC` + `ENABLE_MCPVAULT` + `ENABLE_HTTPS` + `ENABLE_RUNNER` + `TAILSCALE_AUTH_KEY`. This gives you Claude.ai vault access, scheduled automation, and private SSH.
+> **Recommended setup:** `ENABLE_OBSIDIAN_SYNC` + `ENABLE_MCPVAULT` + `ENABLE_HTTPS` + `ENABLE_RUNNER`. This gives you Claude.ai vault access and scheduled automation. SSH access is via GCP IAP — no VPN needed.
 
 ---
 
@@ -78,7 +77,7 @@ Obsidian Sync (cloud)
 |-------|------|-----|---------|
 | **Infrastructure** | VM, firewall, GCP resources | Terraform | `infra/**` changes |
 | **Services** | CLIs, Python daemons, systemd units | `services/deploy.sh` via IAP SSH | `services/**` changes |
-| **Environment** | Tailscale auth, `claude login`, `ob login` | Manual (one-time) | VM recreation only |
+| **Environment** | `claude login`, `ob login` | Manual (one-time) | VM recreation only |
 
 ---
 
@@ -182,8 +181,6 @@ gcloud iam workload-identity-pools providers describe github-provider \
 |------|-------|
 | `MCPVAULT_PASSWORD` | Strong password (12+ chars) |
 | `DUCKDNS_TOKEN` | Token from duckdns.org |
-| `TAILSCALE_AUTH_KEY` | From tailscale.com/admin/settings/keys |
-
 ### 5. Deploy
 
 ```bash
@@ -216,14 +213,7 @@ Look for `=== Bootstrap Completed` at the end. Then check the service deploy log
 cat /var/log/obsidian-deploy.log
 ```
 
-### 1. Tailscale
-
-```bash
-tailscale status          # check if already connected
-tailscale ip -4           # save this IP for future SSH
-```
-
-### 2. Obsidian Sync
+### 1. Obsidian Sync
 
 ```bash
 sudo -u obsidian ob login                              # authenticate with your Obsidian account
@@ -234,13 +224,13 @@ sudo systemctl start obsidian-sync                     # begin continuous sync
 journalctl -u obsidian-sync -f                         # watch files appear in /opt/obsidian-vault/
 ```
 
-### 3. Claude CLI
+### 2. Claude CLI
 
 ```bash
 claude login    # follow the OAuth flow
 ```
 
-### 4. obsidian-runner
+### 3. obsidian-runner
 
 ```bash
 sudo systemctl status obsidian-runner   # verify it started automatically
@@ -252,7 +242,7 @@ Place your schedule file at `$VAULT_BASE/00-Inbox/_other/schedules.yaml`. The da
 > [!NOTE]
 > `call_llm()` in `services/obsidian-runner/obsidian_runner.py` is currently a placeholder. Wire it to the Anthropic SDK to make prompts actually run.
 
-### 5. Connect MCPVault to Claude.ai
+### 4. Connect MCPVault to Claude.ai
 
 1. Claude.ai → Settings → Integrations → **Add MCP server**
 2. URL: `https://your-subdomain.duckdns.org/sse`
@@ -348,6 +338,5 @@ obsidian-cloud/
 - [supergateway](https://github.com/supercorp-ai/supergateway)
 - [Caddy](https://caddyserver.com/)
 - [DuckDNS](https://www.duckdns.org/)
-- [Tailscale](https://tailscale.com/)
 - [GCP Free Tier](https://cloud.google.com/free)
 - [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
