@@ -35,6 +35,12 @@ jobs:
 
       - name: Copy services to VM
         run: |
+          gcloud compute ssh obsidian-vm \
+            --zone=${{ vars.GCP_ZONE || 'us-central1-a' }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --tunnel-through-iap \
+            --quiet \
+            --command="rm -rf /tmp/services"
           gcloud compute scp --recurse services/ \
             obsidian-vm:/tmp/services \
             --zone=${{ vars.GCP_ZONE || 'us-central1-a' }} \
