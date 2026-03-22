@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/npx supergateway --stdio "/usr/bin/npx @bitbonsai/mcpvault __VAULT_PATH__" --port 3000 --outputTransport streamableHttp
+ExecStart=/usr/bin/npx supergateway --stdio "/usr/bin/npx @bitbonsai/mcpvault __VAULT_PATH__" --port 3000 --outputTransport streamableHttp --stateful
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
