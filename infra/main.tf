@@ -7,23 +7,6 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# IAM — CI/CD service account permissions
-# -----------------------------------------------------------------------------
-# Grants the Terraform/CI service account IAP tunnel access so GitHub Actions
-# can SSH into the VM via --tunnel-through-iap without manual gcloud commands.
-# Requires the SA to have roles/iam.securityAdmin (one-time WIF setup step).
-
-locals {
-  ci_service_account = "serviceAccount:terraform-github-actions@${var.project_id}.iam.gserviceaccount.com"
-}
-
-resource "google_project_iam_member" "ci_iap_tunnel" {
-  project = var.project_id
-  role    = "roles/iap.tunnelResourceAccessor"
-  member  = local.ci_service_account
-}
-
-# -----------------------------------------------------------------------------
 # Firewall Rules
 # -----------------------------------------------------------------------------
 
