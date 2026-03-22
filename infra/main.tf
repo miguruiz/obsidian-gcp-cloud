@@ -136,7 +136,7 @@ resource "google_compute_instance" "obsidian_vm" {
     if [ -n "$TAILSCALE_AUTH_KEY" ]; then
       echo ">>> Installing Tailscale..."
       curl -fsSL https://tailscale.com/install.sh | sh
-      tailscale up --authkey="$TAILSCALE_AUTH_KEY" --accept-routes
+      tailscale up --authkey="$TAILSCALE_AUTH_KEY" --accept-routes --accept-dns=false
       echo ">>> Tailscale connected: $(tailscale ip -4)"
     else
       echo ">>> Tailscale not configured (skipping)"
