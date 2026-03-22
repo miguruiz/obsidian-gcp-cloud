@@ -2,7 +2,7 @@ __DUCKDNS_SUBDOMAIN__.duckdns.org {
     basicauth /* {
         __MCPVAULT_USER__ __MCPVAULT_HASH__
     }
-    reverse_proxy localhost:3000
+    reverse_proxy 127.0.0.1:3000
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     }
