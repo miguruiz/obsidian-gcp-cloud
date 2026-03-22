@@ -1,0 +1,77 @@
+name: "Deploy Services"
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "services/**"
+      - ".github/workflows/deploy-services.yml"
+  workflow_dispatch: # Manual trigger + called by infra.yml after apply
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: "Deploy Services to VM"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Copy services to VM
+        run: |
+          gcloud compute scp --recurse services/ \
+            obsidian-vm:/tmp/services \
+            --zone=${{ vars.GCP_ZONE || 'us-central1-a' }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --tunnel-through-iap \
+            --quiet
+
+      - name: Run deploy.sh on VM
+        run: |
+          gcloud compute ssh obsidian-vm \
+            --zone=${{ vars.GCP_ZONE || 'us-central1-a' }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --tunnel-through-iap \
+            --quiet \
+            --command="
+              sudo \
+                ENABLE_OBSIDIAN_SYNC='${{ vars.ENABLE_OBSIDIAN_SYNC || 'false' }}' \
+                ENABLE_MCPVAULT='${{ vars.ENABLE_MCPVAULT || 'false' }}' \
+                ENABLE_CLAUDE_CLI='${{ vars.ENABLE_CLAUDE_CLI || 'false' }}' \
+                ENABLE_RUNNER='${{ vars.ENABLE_RUNNER || 'false' }}' \
+                ENABLE_HTTPS='${{ vars.ENABLE_HTTPS || 'false' }}' \
+                ENABLE_COUCHDB='${{ vars.ENABLE_COUCHDB || 'false' }}' \
+                VAULT_PATH='${{ vars.OBSIDIAN_VAULT_PATH || '/opt/obsidian-vault' }}' \
+                MCPVAULT_USER='${{ vars.MCPVAULT_USER || 'admin' }}' \
+                MCPVAULT_PASSWORD='${{ secrets.MCPVAULT_PASSWORD }}' \
+                DUCKDNS_SUBDOMAIN='${{ vars.DUCKDNS_SUBDOMAIN }}' \
+                DUCKDNS_TOKEN='${{ secrets.DUCKDNS_TOKEN }}' \
+                COUCHDB_USER='${{ vars.COUCHDB_USER || 'admin' }}' \
+                COUCHDB_PASSWORD='${{ secrets.COUCHDB_PASSWORD }}' \
+              bash /tmp/services/deploy.sh
+            "
+
+      - name: Verify services
+        run: |
+          gcloud compute ssh obsidian-vm \
+            --zone=${{ vars.GCP_ZONE || 'us-central1-a' }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --tunnel-through-iap \
+            --quiet \
+            --command="systemctl status obsidian-sync mcpvault obsidian-runner caddy --no-pager || true"

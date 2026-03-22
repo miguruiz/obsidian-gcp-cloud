@@ -1,0 +1,35 @@
+# =============================================================================
+# terraform.tfvars.example - Example infrastructure variable values
+# =============================================================================
+# Copy to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# IMPORTANT: Never commit terraform.tfvars to git (it's in .gitignore).
+#
+# Service feature flags and config (passwords, vault path, etc.) are NOT
+# Terraform variables — they live as GitHub Actions vars/secrets and are
+# passed to services/deploy.sh at deploy time.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# GCP Project (REQUIRED)
+# -----------------------------------------------------------------------------
+project_id = "your-gcp-project-id"
+
+# -----------------------------------------------------------------------------
+# Region/Zone (Optional — defaults are free-tier eligible)
+# -----------------------------------------------------------------------------
+# region = "us-central1"
+# zone   = "us-central1-a"
+
+# -----------------------------------------------------------------------------
+# Network Security
+# -----------------------------------------------------------------------------
+# Open port 443 for Caddy HTTPS (needed when ENABLE_MCPVAULT=true in CI)
+enable_https = false
+
+# -----------------------------------------------------------------------------
+# Tailscale (runs in bootstrap on first boot — needed before CI/CD can SSH in)
+# -----------------------------------------------------------------------------
+# Get an auth key from: https://login.tailscale.com/admin/settings/keys
+# tailscale_auth_key = "tskey-auth-xxxxxxxxxxxxxxxxxxxxx"

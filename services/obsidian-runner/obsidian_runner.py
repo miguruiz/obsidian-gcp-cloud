@@ -56,11 +56,11 @@ def jobs_due(jobs, since, now):
 
 
 def call_llm(prompt_text, model="claude-sonnet-4-6", temperature=0.7):
-    """Placeholder LLM call — replace with real Anthropic API call."""
+    """Placeholder LLM call -- replace with real Anthropic API call."""
     logger.info(
         "  [LLM] model=%s temperature=%s prompt_len=%d", model, temperature, len(prompt_text)
     )
-    return f"[placeholder response — {datetime.now().isoformat()}]"
+    return f"[placeholder response -- {datetime.now().isoformat()}]"
 
 
 def execute_prompt(prompt_path):
@@ -110,9 +110,9 @@ def execute_job(job):
         success, msg = execute_prompt(prompt_path)
         results.append((prompt_path, success, msg))
         if success:
-            logger.info("  ✓ %s", prompt_path)
+            logger.info("  OK %s", prompt_path)
         else:
-            logger.warning("  ✗ %s (%s)", prompt_path, msg)
+            logger.warning("  FAIL %s (%s)", prompt_path, msg)
     return results
 
 
@@ -120,11 +120,11 @@ def write_log(job_id, results, run_time):
     """Append a markdown block to LOG_FILE."""
     os.makedirs(LOG_DIR, exist_ok=True)
     all_ok = all(s for _, s, _ in results)
-    status = "✓" if all_ok else "✗"
+    status = "OK" if all_ok else "FAIL"
     timestamp = run_time.strftime("%Y-%m-%d %H:%M")
-    lines = [f"## {timestamp} — {job_id} {status}"]
+    lines = [f"## {timestamp} -- {job_id} {status}"]
     for prompt_path, success, msg in results:
-        mark = "✓" if success else f"✗ ({msg})"
+        mark = "OK" if success else f"FAIL ({msg})"
         lines.append(f"- `{prompt_path}` {mark}")
     lines.append("")
     block = "\n".join(lines) + "\n"

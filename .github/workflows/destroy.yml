@@ -21,13 +21,11 @@ on:
         default: ''
 
 env:
-  TF_VERSION: "1.7.0"
+  TF_VERSION: "1.9.0"
   TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
-  TF_VAR_couchdb_password: ${{ secrets.COUCHDB_PASSWORD }}
   TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
-  TF_VAR_enable_https: ${{ vars.ENABLE_HTTPS }}
-  TF_VAR_duckdns_subdomain: ${{ vars.DUCKDNS_SUBDOMAIN }}
-  TF_VAR_duckdns_token: ${{ secrets.DUCKDNS_TOKEN }}
+  TF_VAR_enable_https: ${{ vars.ENABLE_HTTPS || 'false' }}
+  TF_VAR_zone: ${{ vars.GCP_ZONE || 'us-central1-a' }}
 
 permissions:
   contents: read
@@ -87,6 +85,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Terraform Init
         run: terraform init
+        working-directory: infra
 
       # -----------------------------------------------------------------------
       # Terraform Destroy Plan
@@ -94,6 +93,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Terraform Destroy Plan
         id: plan
+        working-directory: infra
         run: |
           echo "## 🔴 Destroy Plan" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -220,11 +220,13 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Terraform Init
         run: terraform init
+        working-directory: infra
 
       # -----------------------------------------------------------------------
       # Terraform Destroy
       # -----------------------------------------------------------------------
       - name: Terraform Destroy
+        working-directory: infra
         run: |
           echo "🔥 Destroying infrastructure..."
           terraform destroy -auto-approve

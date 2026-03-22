@@ -1,0 +1,14 @@
+[Unit]
+Description=MCPVault MCP Server (SSE via supergateway on :3000)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/npx supergateway --stdio "/usr/bin/npx @bitbonsai/mcpvault __VAULT_PATH__" --port 3000
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

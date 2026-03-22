@@ -1,0 +1,16 @@
+[Unit]
+Description=Obsidian Headless Continuous Sync
+After=network.target
+
+[Service]
+Type=simple
+User=obsidian
+ExecStart=/usr/bin/ob sync --continuous
+WorkingDirectory=__VAULT_PATH__
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
