@@ -14,12 +14,6 @@ Modular personal infrastructure for syncing an Obsidian vault to a server, expos
 
 ---
 
-## ✅ TODO
-
-- [ ] Follow manual steps (see [Manual Steps After Deployment](#️-manual-steps-after-deployment))
-- [ ] Test the MCP from Claude
-
----
 
 ## 📋 Table of Contents
 
